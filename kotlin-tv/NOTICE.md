@@ -21,7 +21,7 @@
 - org.json（仅 JVM 工具，APK 使用 Android 内置实现）：https://github.com/stleary/JSON-java — 公有领域声明
 - JUnit（仅测试）：https://github.com/junit-team/junit4 — EPL-1.0
 
-应用图标和 TV banner 沿用本仓库素材。这里的应用不是内容平台官方客户端。
+本地修复分支的应用图标与 TV banner 采用用户选定的 AI 生成红果设计，分别以 256×256 与 640×360 的 WebP 资源随包提供。这里的应用不是内容平台官方客户端。
 
 播放请求身份、请求头及内联视频列表解析参考 tsukiyo-zero/hongguoTV（GPL-3.0），提交
 `88c6238d4ee987f45eb134215e221df0b8634f55`：

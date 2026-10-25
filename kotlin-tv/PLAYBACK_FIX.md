@@ -36,4 +36,6 @@
 
 开发机需要 JDK 17；Android 构建还需要 README 所列 SDK。这里只修改播放链路，尚未承诺修复第三方搜索或短剧目录接口。
 
-Debug 构建使用独立包名 `com.hongguotv.nativeapp.playbackfix`，显示为「红果 TV 修复测试」。可以与作者发布签名的原版并排安装，不覆盖旧数据；它使用开发签名，不是上游正式版。执行 `:app:assembleDebug` 即可生成，不需要发布私钥。
+Debug 构建使用独立包名 `com.hongguotv.nativeapp.playbackfix`。构建号 10 起名称为「红果 TV」，采用用户选定的红果图标及深色电视横幅；构建号 9 的名称为「红果 TV 修复测试」。同包名、同开发签名可保留本机数据覆盖升级；作者发布签名的原版继续独立保留。它使用开发签名，不是上游正式版。执行 `:app:assembleDebug` 即可生成，不需要发布私钥。
+
+图标与横幅由 imagegen 内置工具按选定预览分别生成，源图仅存本地 outputs/branding。生产资源缩至 256×256 / 640×360，以 WebP quality=88、method=6 压缩；构建无需生成工具或大尺寸源图。
