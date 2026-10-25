@@ -17,6 +17,12 @@ object TvStyle {
     val muted=Color.rgb(160,161,170)
     val outline=Color.rgb(50,51,57)
     const val POSTER_ASPECT=2f/3f
+    fun posterColumns(context: Context)=if(context.resources.configuration.fontScale>1.2f || context.resources.displayMetrics.widthPixels/context.resources.displayMetrics.density<800) 4 else 5
+    @android.annotation.SuppressLint("WrongConstant")
+    fun balancePosterTitle(view: android.widget.TextView) {
+        // The API 23 Layout value also works on Android 8; SDK 36's IntDef names its API 29 alias.
+        view.breakStrategy=android.text.Layout.BREAK_STRATEGY_BALANCED
+    }
     fun shape(context: Context,color: Int,border: Int=Color.TRANSPARENT,radius: Int=10)=GradientDrawable().apply {
         setColor(color); cornerRadius=radius*context.resources.displayMetrics.density
         setStroke((2*context.resources.displayMetrics.density).toInt(),border)

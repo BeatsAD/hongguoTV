@@ -347,7 +347,7 @@ class MainActivity: Activity() {
         }
     }
     private fun navigation(container: LinearLayout) {
-        val bar=FrameLayout(this).apply { elevation=dp(8).toFloat(); if(screen==Screen.CATALOG && !inlineHomeFilters()) setBackgroundColor(bg) }
+        val bar=FrameLayout(this).apply { elevation=dp(8).toFloat(); setBackgroundColor(bg) }
         val brand=row()
         brand.addView(ImageView(this).apply { setImageResource(R.drawable.app_icon) },lp(dp(28),dp(28)).apply { rightMargin=dp(9) })
         brand.addView(text("红果 TV",19f).apply { typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL) })
@@ -571,9 +571,9 @@ class MainActivity: Activity() {
             val section=row().apply { setPadding(0,dp(16),0,dp(20)) }
             section.addView(text("搜索结果",22f),lp(0,-2).apply { weight=1f }); section.addView(text("“$query”",14f,muted)); list.addView(section)
         }
-        val cards=mutableListOf<View>(); val count=if(tab==2) 3 else 4; val gap=dp(if(tab==2) 22 else if(LibrarySection.fromTab(tab)!=null) 24 else 17)
+        val cards=mutableListOf<View>(); val count=TvStyle.posterColumns(this); val gap=dp(20)
         val width=(resources.displayMetrics.widthPixels-(resources.displayMetrics.widthPixels*84f/1024).toInt()-gap*(count-1))/count
-        val aspect=if(tab==2) 3f/4.05f else if(LibrarySection.fromTab(tab)!=null) TvStyle.POSTER_ASPECT else 16f/9f
+        val aspect=TvStyle.POSTER_ASPECT
         displayed.chunked(count).forEach { items ->
             val line=row(); line.gravity=Gravity.TOP
             items.forEachIndexed { columnIndex,item ->
@@ -583,16 +583,15 @@ class MainActivity: Activity() {
                 val image=CinematicArtwork(this).apply { importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO }; artwork.addView(image,FrameLayout.LayoutParams(-1,-1)); loadCover(image,item.cover); cardImages[item.id]=image to item.cover
                 if(tab==2) {
                     val rankLabel=position?.rank?.let { "第 $it 名" } ?: "名次暂无"
-                    artwork.addView(View(this).apply { background=GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP,intArrayOf(Color.argb(245,10,10,15),Color.TRANSPARENT)) },FrameLayout.LayoutParams(-1,-1))
-                    artwork.addView(text(position?.rank?.toString() ?: "—",90f).apply { typeface=Typeface.create("sans-serif",Typeface.BOLD); setPadding(dp(18),0,dp(10),0); setTextColor(Color.argb(230,255,255,255)) },FrameLayout.LayoutParams(-2,-2,Gravity.TOP or Gravity.START))
-                    val caption=column().apply { setPadding(dp(20),0,dp(20),dp(23)) }
-                    caption.addView(text("红果漫剧",11f)); caption.addView(text(item.title,28f).apply { typeface=Typeface.create("serif",Typeface.NORMAL); maxLines=2; ellipsize=TextUtils.TruncateAt.END; setPadding(0,dp(9),0,0) })
-                    artwork.addView(caption,FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM))
+                    val caption=row().apply { gravity=Gravity.TOP; setPadding(0,dp(10),0,0) }
+                    caption.addView(text(position?.rank?.toString()?.padStart(2,'0') ?: "—",24f,muted).apply { typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL) },lp(-2,-2).apply { rightMargin=dp(8) })
+                    caption.addView(text(item.title,15f).apply { maxLines=2; minLines=2; TvStyle.balancePosterTitle(this); ellipsize=TextUtils.TruncateAt.END },lp(0,-2).apply { weight=1f })
+                    card.addView(caption,lp(-1,-2).apply { weight=1f })
                     card.contentDescription="$rankLabel，${item.title}，${position?.heat?.ifBlank { "热度暂无" } ?: "热度暂无"}"
                 }
-                if(tab!=2) card.addView(text(item.title,if(LibrarySection.fromTab(tab)!=null) 16f else 15f).apply { maxLines=2; minLines=1; ellipsize=TextUtils.TruncateAt.END; setPadding(0,dp(10),0,0) },lp(-1,-2).apply { weight=1f })
+                if(tab!=2) card.addView(text(item.title,15f).apply { maxLines=2; minLines=2; TvStyle.balancePosterTitle(this); ellipsize=TextUtils.TruncateAt.END; setPadding(0,dp(10),0,0) },lp(-1,-2).apply { weight=1f })
                 val progress=if(tab==4 || collection=="resume") library.progress(item.id) else null
-                val badge=text(if(tab==3) library.favoriteLabel(item.id) else if(tab==6) "稍后看" else if(tab==2) listOf(item.badge,position?.heat?.ifBlank { "热度暂无" } ?: "热度暂无").filter(String::isNotBlank).joinToString(" · ") else if(progress!=null) if(library.watched(item.id)) "整剧已看完" else "第 ${progress.episodeIndex+1} 集 · ${formatTime(progress.position)}" else item.badge,12f,muted).apply { maxLines=1; minLines=1; minHeight=dp(19); ellipsize=TextUtils.TruncateAt.END; setPadding(0,dp(if(tab==2) 12 else 3),0,0) }
+                val badge=text(if(tab==3) library.favoriteLabel(item.id) else if(tab==6) "稍后看" else if(tab==2) listOf(item.badge,position?.heat?.ifBlank { "热度暂无" } ?: "热度暂无").filter(String::isNotBlank).joinToString(" · ") else if(progress!=null) if(library.watched(item.id)) "整剧已看完" else "第 ${progress.episodeIndex+1} 集 · ${formatTime(progress.position)}" else item.badge,12f,muted).apply { maxLines=1; minLines=1; minHeight=dp(19); ellipsize=TextUtils.TruncateAt.END; setPadding(0,dp(3),0,0) }
                 card.addView(badge,lp(-1,-2)); if(tab==3) favoriteBadges[item.id]=badge
                 card.setOnClickListener { catalogFocus=item.id; openDetail(item,tab==4 || collection=="resume" || collection=="updates") }
                 card.setOnLongClickListener { catalogFocus=item.id; quickActions(item,card); true }
@@ -631,21 +630,14 @@ class MainActivity: Activity() {
         else homeUpdates?.let { updates -> updates.nextFocusUpId=typeButtons[library.contentType]?.id ?: nav[0].id; updates.nextFocusDownId=cards.first().id; cards.take(count).forEach { it.nextFocusUpId=updates.id } }
         typeButtons.values.forEach { it.nextFocusDownId=searchInput?.id ?: collectionBack?.id ?: resumeCards.firstOrNull()?.id ?: homeUpdates?.id ?: cards.first().id }
         searchInput?.nextFocusDownId=cards.first().id
-        searchButton?.nextFocusDownId=cards[minOf(4,cards.lastIndex)].id
-        searchActions.forEach { it.nextFocusDownId=if(it.tag=="search:history") searchInput!!.id else cards[minOf(4,cards.lastIndex)].id }
+        searchButton?.nextFocusDownId=cards[minOf(count-1,cards.lastIndex)].id
+        searchActions.forEach { it.nextFocusDownId=if(it.tag=="search:history") searchInput!!.id else cards[minOf(count-1,cards.lastIndex)].id }
         if(focusType) typeButtons[library.contentType]?.requestFocus() else if(focusNav) nav[tab].requestFocus()
         else if(resumeCards.isNotEmpty() && (catalogFocus.isEmpty() || catalogFocus.startsWith("resume:"))) (resumeCards.firstOrNull { it.tag==catalogFocus } ?: resumeCards.first()).requestFocus()
         else cards[displayed.indexOfFirst { it.id==catalogFocus }.coerceAtLeast(0)].requestFocus()
         val savedScroll=scrollPositions[catalogPageKey]
         scroll.post {
             if(catalogScroll!==scroll) return@post
-            cards.forEach { view ->
-                val card=view as LinearLayout
-                val image=card.getChildAt(0)
-                val textHeight=card.paddingTop+card.paddingBottom+(1 until card.childCount).sumOf { card.getChildAt(it).measuredHeight }
-                val target=minOf((width/aspect).toInt(),(scroll.height-textHeight-dp(4)).coerceAtLeast(dp(48)))
-                if(image.layoutParams.height!=target) image.layoutParams=image.layoutParams.apply { height=target }
-            }
             scroll.post settle@{
                 if(catalogScroll!==scroll) return@settle
                 savedScroll?.let { scroll.scrollTo(0,it) }
@@ -680,8 +672,8 @@ class MainActivity: Activity() {
         val top=nav[0]
         val home=HomeScreen(this,top,::loadCover,{ item,_ -> preview(item) },
             { item,resume -> openDetail(item,resume) },::quickActions,{ catalogFocus=it },hero,homeFilters)
-        homeScreen=home; body.clipChildren=false
-        body.addView(home,lp(resources.displayMetrics.widthPixels,0).apply { weight=1f; leftMargin=-(resources.displayMetrics.widthPixels*42f/1024).toInt() })
+        homeScreen=home
+        body.addView(home,lp(-1,0).apply { weight=1f })
         home.render(shelves,catalogFocus,!focusNav && !focusType,
             if(hasMore) { { page=2; catalogFocus=""; showCatalog(true) } } else null,homePosition)
         home.refresh.text=if(loading) if(homeFromCache) "已显示上次内容 · 正在更新热门…" else "正在更新热门…" else "刷新热门"
@@ -873,11 +865,9 @@ class MainActivity: Activity() {
     }
     private fun showDetail(focusEpisode: Boolean) {
         invalidatePage(); releaseCatalogViews(); screen=Screen.DETAIL; val data=detail ?: return showCatalog()
-        val body=base(); navigation(body); body.clipChildren=false
-        val side=(resources.displayMetrics.widthPixels*42f/1024).toInt()
-        val scroll=TvScrollView(this,94).apply { clipChildren=false }
-        val content=column().apply { clipChildren=false; clipToPadding=false; setPadding(side,0,side,0) }; scroll.addView(content)
-        body.addView(scroll,lp(resources.displayMetrics.widthPixels,0).apply { weight=1f; leftMargin=-side })
+        val body=base(); navigation(body)
+        val scroll=pageScroll(); val content=column(); scroll.addView(content)
+        body.addView(scroll,lp(-1,0).apply { weight=1f })
         val progress=library.progress(data.series.id)
         val resumeTarget=ResumePlayback.target(data.episodes,progress?.episodeId,progress?.position ?: 0,progress?.completed==true)
         val watched=library.watched(data.series.id)
@@ -903,9 +893,9 @@ class MainActivity: Activity() {
         }
         (favorite.parent as LinearLayout).addView(synopsisButton,lp(-2,-2).apply { leftMargin=dp(10) })
         val back=button("‹ 返回") { goBack() }.apply { textSize=12f; background=rounded(Color.TRANSPARENT); nextFocusUpId=nav[tab].id; nextFocusDownId=play.id }
-        hero.addView(back,FrameLayout.LayoutParams(-2,dp(36),Gravity.START or Gravity.TOP).apply { leftMargin=side; topMargin=dp(94) })
+        content.addView(back,lp(-2,dp(36)).apply { bottomMargin=dp(12) })
         hero.onFocused={ scroll.post { scroll.smoothScrollTo(0,0) } }
-        content.addView(hero,lp(resources.displayMetrics.widthPixels,dp(if(resources.configuration.fontScale>1.2f) 480 else 440)).apply { leftMargin=-side; topMargin=-dp(94) })
+        content.addView(hero,lp(-1,hero.preferredHeight).apply { bottomMargin=dp(20) })
         content.addView(synopsis)
         val heroActions=listOf(play,favorite,synopsisButton)
         heroActions.forEachIndexed { index,view -> view.nextFocusUpId=back.id; view.nextFocusLeftId=heroActions[(index-1).coerceAtLeast(0)].id; view.nextFocusRightId=heroActions[(index+1).coerceAtMost(heroActions.lastIndex)].id }
