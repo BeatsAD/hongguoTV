@@ -98,7 +98,7 @@ class AppUpdater(private val activity: Activity, private val idle: () -> Boolean
         if(!enabled) {
             dialog?.dismiss()
             dialog=AlertDialog.Builder(activity).setTitle("应用版本").setMessage("当前版本 ${BuildConfig.VERSION_NAME}\n开发测试版通过本地安装更新，不连接上游自动更新渠道。")
-                .setPositiveButton("关闭",null).create().apply { setOnDismissListener { dialog=null; if(from?.isAttachedToWindow==true) from.requestFocus() }; show() }
+                .setPositiveButton("关闭",null).create().apply { setOnDismissListener { dialog=null; if(from?.isAttachedToWindow==true) from.requestFocus() }; show(); TvDialogStyle.apply(this) }
             return
         }
         if (!active) return
@@ -126,7 +126,7 @@ class AppUpdater(private val activity: Activity, private val idle: () -> Boolean
             if (dialog === next) { dialog = null; statusView = null }
             if (from?.isAttachedToWindow == true) from.requestFocus()
         }
-        next.show()
+        next.show(); TvDialogStyle.apply(next)
         next.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener { when { ready -> install(); available != null -> download(true); else -> check(true) } }
         next.getButton(AlertDialog.BUTTON_NEGATIVE).setOnClickListener {
             available?.let { preferences.edit().putLong("deferred_code", it.versionCode).putLong("deferred_until", System.currentTimeMillis()+24*60*60*1000L).apply() }

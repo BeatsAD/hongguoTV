@@ -12,6 +12,7 @@ import android.os.Looper
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
+import android.view.ViewGroup
 import android.widget.*
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
@@ -35,7 +36,7 @@ class TvTools(private val activity: Activity) {
     private fun open(next: AlertDialog,anchor: View?) {
         dialog?.dismiss(); dialog=next
         next.setOnDismissListener { if(dialog===next) { phone?.close(); phone=null; dialog=null }; if(anchor?.isAttachedToWindow==true) anchor.requestFocus() }
-        next.show()
+        next.show(); TvDialogStyle.apply(next)
     }
     fun close() { dialog?.dismiss(); phone?.close(); phone=null }
     fun destroy() { close(); worker.shutdownNow() }
@@ -45,9 +46,27 @@ class TvTools(private val activity: Activity) {
         open(next,anchor); next.getButton(AlertDialog.BUTTON_NEGATIVE).requestFocus()
     }
     fun choose(title: String,labels: List<String>,anchor: View?,onChoice: (Int)->Unit,extra: String?=null,onExtra: ()->Unit={}) {
-        val builder=AlertDialog.Builder(activity).setTitle(title).setItems(labels.toTypedArray()) { _,index-> onChoice(index) }.setNegativeButton("取消",null)
+        val builder=AlertDialog.Builder(activity).setTitle(title).setAdapter(choiceAdapter(labels)) { _,index-> onChoice(index) }.setNegativeButton("取消",null)
         if(extra!=null) builder.setNeutralButton(extra) { _,_-> onExtra() }
         val next=builder.create(); open(next,anchor); next.listView.requestFocus()
+    }
+    fun choiceAdapter(labels: List<String>,selected: Int?=null)=object: ArrayAdapter<String>(activity,android.R.layout.simple_list_item_single_choice,labels) {
+        override fun getView(position: Int,convertView: View?,parent: ViewGroup): View {
+            val label=labels[position].replace(" · ","\n")
+            return CheckedTextView(activity).apply {
+                text=label; textSize=15f; setTextColor(TvStyle.text); gravity=Gravity.CENTER_VERTICAL
+                minHeight=dp(54); setPadding(dp(18),dp(14),dp(18),dp(14)); maxLines=3; isChecked=position==selected; checkMarkDrawable=null
+                if(position==selected) setCompoundDrawables(null,null,TvGlyph(TvGlyph.Kind.CHECK).apply { setBounds(0,0,dp(18),dp(18)) },null)
+                if(label.contains('\n')) {
+                    val secondary=label.indexOf('\n')+1
+                    text=android.text.SpannableString(label).apply {
+                        setSpan(android.text.style.ForegroundColorSpan(TvStyle.muted),secondary,length,0)
+                        setSpan(android.text.style.RelativeSizeSpan(.8f),secondary,length,0)
+                    }
+                }
+                contentDescription=labels[position]+if(position==selected) "，已选中" else ""
+            }
+        }
     }
     fun episodePicker(count: Int,current: Int,anchor: View?,select: (Int)->Unit) {
         val content=column(); var digits=(current+1).toString(); var replace=true
@@ -61,7 +80,9 @@ class TvTools(private val activity: Activity) {
             keys.forEach { key ->
                 val button=Button(activity).apply {
                     id=View.generateViewId(); text=key; minHeight=dp(42)
-                    backgroundTintList=android.content.res.ColorStateList(arrayOf(intArrayOf(android.R.attr.state_focused),intArrayOf()),intArrayOf(Color.rgb(255,99,76),Color.rgb(31,36,47)))
+                    val states=arrayOf(intArrayOf(android.R.attr.state_focused),intArrayOf())
+                    backgroundTintList=android.content.res.ColorStateList(states,intArrayOf(TvStyle.text,TvStyle.raised))
+                    setTextColor(android.content.res.ColorStateList(states,intArrayOf(TvStyle.background,TvStyle.text)))
                     setOnClickListener { when(key) { "清空"->{ digits="";replace=false;value.text="—" }; "退格"->erase(); else->digit(key) } }
                 }
                 buttons+=button
@@ -109,7 +130,7 @@ class TvTools(private val activity: Activity) {
             info("手机输入","请让电视和手机连接同一局域网（Wi-Fi 或有线网络）后重试。",anchor); return
         }
         val content=column(); val status=label("正在生成二维码…"); content.addView(status)
-        val next=AlertDialog.Builder(activity).setTitle("手机输入剧名").setView(content).setNegativeButton("关闭",null).create()
+        val next=AlertDialog.Builder(activity).setTitle("手机输入剧名").setView(ScrollView(activity).apply { addView(content) }).setNegativeButton("关闭",null).create()
         open(next,anchor)
         worker.execute {
             try {

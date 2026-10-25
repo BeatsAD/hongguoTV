@@ -4,7 +4,6 @@ package com.hongguotv.nativeapp
 import android.app.Activity
 import android.app.Dialog
 import android.graphics.Color
-import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.View
 import android.view.Window
@@ -23,7 +22,7 @@ class EpisodePanel(
     private fun label(value: String,size: Float=17f)=TextView(activity).apply { text=value; textSize=size; setTextColor(TvStyle.text); setPadding(dp(8),dp(6),dp(8),dp(6)) }
     private fun button(value: String,active: Boolean=false,action: ()->Unit)=label(value,16f).apply {
         id=View.generateViewId(); gravity=Gravity.CENTER; minHeight=dp(46); isFocusable=true; isFocusableInTouchMode=true
-        fun paint(focus: Boolean) { background=GradientDrawable().apply { setColor(if(focus) TvStyle.accent else if(active) Color.rgb(61,39,34) else TvStyle.surface); cornerRadius=dp(6).toFloat() } }
+        fun paint(focus: Boolean) { setTextColor(if(active) TvStyle.background else TvStyle.text); background=if(active && focus) TvStyle.focused(activity,TvStyle.text,8) else TvStyle.shape(activity,if(active) TvStyle.text else if(focus) TvStyle.raised else TvStyle.background,if(focus) TvStyle.text else Color.TRANSPARENT,8) }
         paint(false); setOnFocusChangeListener { _,hasFocus -> paint(hasFocus) }; setOnClickListener { action() }
     }
     fun show() {
@@ -34,18 +33,20 @@ class EpisodePanel(
             setBackgroundDrawableResource(android.R.color.transparent)
             setGravity(Gravity.END or Gravity.CENTER_VERTICAL)
             attributes=attributes.apply { x=(activity.resources.displayMetrics.widthPixels*.05f).toInt() }
-            setLayout(minOf(dp(520),(activity.resources.displayMetrics.widthPixels*.8f).toInt()),(activity.resources.displayMetrics.heightPixels*.9f).toInt())
+            setLayout(minOf(dp(410),(activity.resources.displayMetrics.widthPixels*.8f).toInt()),(activity.resources.displayMetrics.heightPixels*.9f).toInt())
         }
     }
     fun dismiss()=dialog.dismiss()
     private fun render() {
-        val content=LinearLayout(activity).apply { orientation=LinearLayout.VERTICAL; setPadding(dp(14),dp(12),dp(14),dp(12)); setBackgroundColor(TvStyle.background) }
-        content.addView(label("选集  /  正在看第 ${current+1} 集",20f))
-        val actions=LinearLayout(activity)
-        val close=button("关闭") { dismiss() }
+        val content=LinearLayout(activity).apply { orientation=LinearLayout.VERTICAL; setPadding(dp(20),dp(22),dp(20),dp(22)); background=TvStyle.shape(activity,TvStyle.surface,radius=20) }
+        val header=LinearLayout(activity).apply { gravity=Gravity.CENTER_VERTICAL }
+        val close=button("×") { dismiss() }.apply { contentDescription="关闭选集"; textSize=23f }
+        header.addView(label("选集",21f),LinearLayout.LayoutParams(0,-2,1f)); header.addView(close,LinearLayout.LayoutParams(dp(36),dp(38)))
+        content.addView(header); content.addView(label("正在看第 ${current+1} 集",12f))
+        val actions=LinearLayout(activity).apply { gravity=Gravity.END }
         lateinit var jump: TextView
         jump=button("跳转集数") { locate(focused,jump) { target -> focused=target; group=target/20; render() } }
-        listOf(close,jump).forEach { actions.addView(it,LinearLayout.LayoutParams(0,-2,1f).apply { setMargins(dp(3),dp(3),dp(3),dp(3)) }) }
+        actions.addView(jump,LinearLayout.LayoutParams(-2,-2).apply { setMargins(dp(3),dp(10),dp(3),dp(8)) })
         content.addView(actions)
         val paging=LinearLayout(activity)
         val previous=button("‹ 上一组") { group--; focused=group*20; render() }.apply { isEnabled=group>0; isFocusable=isEnabled; alpha=if(isEnabled) 1f else .4f }
@@ -72,11 +73,11 @@ class EpisodePanel(
             cell.nextFocusUpId=if(i>=5) cells[i-5].id else if(i<3 && previous.isFocusable) previous.id else if(next.isFocusable) next.id else jump.id
             cell.nextFocusDownId=cells[if(i+5<cells.size) i+5 else if(i/5<cells.lastIndex/5) cells.lastIndex else i].id
         }
-        previous.nextFocusUpId=close.id; next.nextFocusUpId=jump.id
+        previous.nextFocusUpId=jump.id; next.nextFocusUpId=jump.id
         previous.nextFocusDownId=cells.first().id; next.nextFocusDownId=cells[minOf(4,cells.lastIndex)].id
-        close.nextFocusDownId=if(previous.isFocusable) previous.id else cells.first().id
+        close.nextFocusDownId=jump.id
         jump.nextFocusDownId=if(next.isFocusable) next.id else cells[minOf(4,cells.lastIndex)].id
-        close.nextFocusLeftId=close.id; close.nextFocusRightId=jump.id; jump.nextFocusLeftId=close.id; jump.nextFocusRightId=jump.id
+        close.nextFocusLeftId=close.id; close.nextFocusRightId=close.id; jump.nextFocusLeftId=jump.id; jump.nextFocusRightId=jump.id; jump.nextFocusUpId=close.id
         dialog.setContentView(content)
         cells[(focused-group*20).coerceIn(0,cells.lastIndex)].requestFocus()
     }
