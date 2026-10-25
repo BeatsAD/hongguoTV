@@ -12,6 +12,65 @@ import org.junit.Test
 import java.io.IOException
 
 class ContentRepositoryTest {
+    private fun inlineModel(vararg variants: Triple<Int,String,String>): String {
+        val rows=JSONArray()
+        variants.forEach { (height,codec,url) -> rows.put(JSONObject().put("main_url",url)
+            .put("video_meta",JSONObject().put("definition","${height}p").put("codec_type",codec))
+            .put("encrypt_info",JSONObject().put("encrypt",false))) }
+        return JSONObject().put("data",JSONObject().put("123",JSONObject().put("video_model",JSONObject().put("video_list",rows)))).toString()
+    }
+
+    @Test fun playbackIdentityIsIndependentAndStableWithinClient() {
+        val requests=mutableListOf<Request>()
+        val respond: (Request)->String = { request -> requests+=request; inlineModel(Triple(720,"h264","https://example.com/video")) }
+        val first=repository(respond=respond)
+        first.stream("123"); first.stream("123"); repository(respond=respond).stream("123")
+        for(field in listOf("iid","device_id","cdid")) {
+            assertEquals(requests[0].url.queryParameter(field),requests[1].url.queryParameter(field))
+            assertNotEquals(requests[0].url.queryParameter(field),requests[2].url.queryParameter(field))
+        }
+        assertTrue(requests[0].url.queryParameter("iid")!!.matches(Regex("3[0-9]{18}")))
+        assertNull(requests[0].header("x-argus"))
+        assertTrue(requests[0].header("User-Agent")!!.contains("tt-ok/3.12.13.20"))
+    }
+
+    @Test fun inlineModelSelectsCompatibleQualityWithoutLegacyRequest() {
+        var calls=0
+        val repo=repository {
+            calls++
+            inlineModel(Triple(1080,"bytevc2","https://example.com/unsupported"),Triple(1080,"h264","https://example.com/high"),Triple(480,"h264","https://example.com/low"))
+        }
+        assertEquals(StreamInfo("https://example.com/low",null,"480P"),repo.stream("123",720))
+        assertEquals(1,calls)
+    }
+
+    @Test fun inlineModelSupportsStringModelAndHigherCompatibleQuality() {
+        val body=JSONObject(inlineModel(Triple(1080,"h264","https://example.com/high")))
+        val entry=body.getJSONObject("data").getJSONObject("123")
+        entry.put("video_model",entry.getJSONObject("video_model").toString())
+        assertEquals("1080P（兼容资源）",repository { body.toString() }.stream("123",720).quality)
+    }
+
+    @Test fun equalQualityPrefersAvcEvenWhenOnlyHigherResolutionIsAvailable() {
+        val repo=repository { inlineModel(Triple(1080,"hevc","https://example.com/hevc"),Triple(1080,"h264","https://example.com/avc")) }
+        assertEquals("https://example.com/avc",repo.stream("123",720).url)
+    }
+
+    @Test fun responseCannotSubstituteAnUnrequestedEpisode() {
+        val response=inlineModel(Triple(720,"h264","https://example.com/other")).replace("\"123\"","\"456\"")
+        assertEquals("播放信息没有对应剧集",assertThrows(IOException::class.java) { repository { response }.stream("123") }.message)
+    }
+
+    @Test fun emptyAndRejectedModelsExplainUpstreamFailure() {
+        assertEquals("播放接口返回空响应，请稍后重试或更新应用",assertThrows(IOException::class.java) { repository { " " }.stream("123") }.message)
+        assertEquals("播放接口暂不可用（错误码 110001）",assertThrows(IOException::class.java) { repository { """{"code":110001}""" }.stream("123") }.message)
+    }
+
+    @Test fun encryptedInlineResourceWithoutKeyIsNotTreatedAsClearVideo() {
+        val body=inlineModel(Triple(720,"h264","https://example.com/encrypted")).replace("\"encrypt\":false","\"encrypt\":true")
+        assertThrows(IOException::class.java) { repository { body }.stream("123") }
+    }
+
     private fun streamRepository(vararg variants: Triple<Int,String,String>) = repository { request ->
         if(request.url.host=="example.com") {
             val rows=JSONObject()

@@ -8,6 +8,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import org.json.JSONObject
 import org.json.JSONArray
 import java.io.IOException
+import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 internal fun JSONArray.objects() = (0 until length()).mapNotNull { optJSONObject(it) }
@@ -27,6 +28,11 @@ class SearchSessionExpiredException: IOException("搜索结果已过期，请从
 class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectTimeout(15,TimeUnit.SECONDS).readTimeout(30,TimeUnit.SECONDS).callTimeout(45,TimeUnit.SECONDS).build(), private val clock: () -> Long = System::currentTimeMillis) {
     private val signer = Signer()
     private val site = "https://hongguoduanju.com"
+    // Each client uses its own playback identity; the old shared identity is rejected upstream.
+    private val playerDevice = VendorConstants.device + mapOf(
+        "iid" to newPlayerDeviceId(), "device_id" to newPlayerDeviceId(), "cdid" to UUID.randomUUID().toString()
+    )
+    private fun newPlayerDeviceId() = buildString { append('3'); repeat(18) { append(kotlin.random.Random.nextInt(10)) } }
     private data class SearchCursor(val searchId: String, val passback: String, val offset: Int?, val updatedAt: Long)
     private val searchCursors=linkedMapOf<Triple<ContentType,String,Int>,SearchCursor>()
     private fun text(url: String, signed: Signer.Request? = null): String {
@@ -126,13 +132,35 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
     fun stream(id: String, maxQuality: Int = 1080): StreamInfo {
         require(id.matches(Regex("[0-9]{1,30}")))
         val payload="""{"biz_param":{"detail_page_version":0,"device_level":3,"disable_digg_stat":false,"need_all_video_definition":true,"need_mp4_align":false,"use_os_player":false,"use_server_dns":false,"video_platform":1024},"mixed_video_id_map":{"1004":["$id"]}}""".toByteArray()
-        val signed=signer.sign("https://api5-normal-sinfonlineb.fqnovel.com/novel/player/multi_video_model/v1/",VendorConstants.device,payload)
-        val data=JSONObject(text(signed.url,signed))
-        if(data.optInt("Code",data.optInt("code",0))!=0) throw IOException("播放接口暂不可用")
+        // Adapted from tsukiyo-zero/hongguoTV 88c6238, GPL-3.0; see NOTICE.md.
+        val query=Signer.encode(playerDevice + ("_rticket" to clock().toString()))
+        val playerUrl="https://api5-normal-sinfonlineb.fqnovel.com/novel/player/multi_video_model/v1/?$query"
+        val request=Signer.Request(playerUrl,mapOf(
+            "User-Agent" to "com.phoenix.read/71532 (Linux; U; Android 9; SM-N9860; Build/PQ3A.190705.10241111;tt-ok/3.12.13.20)",
+            "Accept" to "application/json; charset=utf-8,application/x-protobuf"
+        ),payload)
+        val response=text(playerUrl,request)
+        if(response.isBlank()) throw IOException("播放接口返回空响应，请稍后重试或更新应用")
+        val data=JSONObject(response)
+        val code=data.optInt("Code",data.optInt("code",0))
+        if(code!=0) throw IOException("播放接口暂不可用（错误码 $code）")
         val map=data.optJSONObject("data") ?: throw IOException("播放信息为空")
-        val entry=map.optJSONObject(id) ?: map.keys().asSequence().mapNotNull { map.optJSONObject(it) }.firstOrNull() ?: throw IOException("播放信息为空")
+        val entry=map.optJSONObject(id) ?: throw IOException("播放信息没有对应剧集")
         val model=entry.optJSONObject("video_model") ?: JSONObject(entry.str("video_model"))
-        val raw=model.opt("fallback_api")
+        // Current models carry renditions directly; avoid a second legacy fallback request.
+        val inline=model.optJSONArray("video_list")?.objects().orEmpty().mapNotNull { row ->
+            val meta=row.optJSONObject("video_meta") ?: return@mapNotNull null
+            val encryption=row.optJSONObject("encrypt_info") ?: return@mapNotNull null
+            val codec=meta.str("codec_type").lowercase(); val mediaUrl=cleanUrl(row.str("main_url"))
+            if(codec.isBlank() || codec in setOf("bytevc2","bvc2") || (!mediaUrl.startsWith("https://") && !mediaUrl.startsWith("http://"))) return@mapNotNull null
+            val key=encryption.str("spade_a").takeIf { it.isNotBlank() }?.let(MediaCrypto::deriveKey)
+            if(key==null && encryption.opt("encrypt") !in listOf(false,0,"0","false")) return@mapNotNull null
+            val height=qualityNumber(meta.str("definition").ifEmpty { meta.str("vheight") })
+            Triple(height,codec,StreamInfo(mediaUrl,key,if(height>0) "${height}P" else "自动"))
+        }.sortedWith(compareByDescending<Triple<Int,String,StreamInfo>> { it.first }.thenByDescending { it.second in setOf("h264","avc","avc1") })
+        val direct=inline.firstOrNull { it.first<=maxQuality } ?: inline.minWithOrNull(compareBy<Triple<Int,String,StreamInfo>> { it.first }.thenByDescending { it.second in setOf("h264","avc","avc1") })
+        if(direct!=null) return if(direct.first>maxQuality) direct.third.copy(quality=direct.third.quality+"（兼容资源）") else direct.third
+        val raw=model.opt("fallback_api") ?: throw IOException("没有电视可播放的清晰度，请稍后再试或选择其他剧集")
         val fallback=when(raw) { is JSONObject -> raw.str("fallback_api"); is JSONArray -> raw.optString(0); else -> runCatching { JSONObject(raw.toString()).str("fallback_api") }.getOrDefault(raw.toString()) }
         if(!fallback.startsWith("https://")) throw IOException("播放地址格式异常")
         val info=JSONObject(text(fallback)).optJSONObject("video_info")?.optJSONObject("data") ?: throw IOException("没有播放资源")

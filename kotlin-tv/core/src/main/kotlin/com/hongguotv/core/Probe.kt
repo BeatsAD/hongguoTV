@@ -2,6 +2,22 @@ package com.hongguotv.core
 
 fun main(args: Array<String>) {
     val repository=ContentRepository()
+    if(args.contains("--episode")) {
+        try {
+            val id=requireNotNull(args.getOrNull(args.indexOf("--episode")+1)?.takeIf { it.matches(Regex("[0-9]{1,30}")) }) { "--episode requires a numeric episode id" }
+            val stream=repository.stream(id)
+            RemoteVideo(repository.http,stream).use { remote ->
+                remote.prepare()
+                val first=remote.read(0,minOf(remote.total,1024*1024L).toInt())
+                val tail=remote.read((remote.total-65536).coerceAtLeast(0),minOf(remote.total,65536L).toInt())
+                check(first.size>=8 && String(first,4,4)=="ftyp")
+                println("quality=${stream.quality}; total=${remote.total}; first=${first.size}; tail=${tail.size}; header=ftyp")
+            }
+        } finally {
+            repository.http.connectionPool.evictAll(); repository.http.dispatcher.executorService.shutdown()
+        }
+        return
+    }
     if(args.contains("--ranking")) {
         try {
             val first=repository.comicRanking()
