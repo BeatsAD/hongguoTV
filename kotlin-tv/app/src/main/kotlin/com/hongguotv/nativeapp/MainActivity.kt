@@ -553,7 +553,7 @@ class MainActivity: Activity() {
         val displayed=if(localCatalog()) catalog.drop((page-1)*pageSize).take(pageSize) else if(tab==0) catalog.filterNot { it.id in library.hidden() } else catalog.take(30)
         if(displayed.isEmpty()) {
             libraryTabs.forEach { it.nextFocusDownId=it.id }
-            if(tab!=1 || query.isNotBlank()) message(list,if(loading) "正在加载推荐…" else when(tab) { 1 -> if(query.isBlank()) "输入关键词，用遥控器确认搜索" else "没有找到相关${library.contentType.label}，换个关键词试试"; 3 -> "在剧集详情中选择收藏，喜欢的剧就会出现在这里"; 4 -> "播放过的剧集会自动保存在这里"; 6 -> "还没有稍后看的剧集，长按剧集可加入"; else -> "本页没有更多内容" })
+            if(tab!=1 || query.isNotBlank()) message(list,if(loading) "正在加载推荐…" else when(tab) { 1 -> if(query.isBlank()) "输入关键词，用遥控器确认搜索" else if(hasMore || page>1) "本页没有相关${library.contentType.label}，可翻页继续查找" else "没有找到相关${library.contentType.label}，换个关键词试试"; 3 -> "在剧集详情中选择收藏，喜欢的剧就会出现在这里"; 4 -> "播放过的剧集会自动保存在这里"; 6 -> "还没有稍后看的剧集，长按剧集可加入"; else -> "本页没有更多内容" })
             if((tab<=2 || localCatalog()) && page>1) addButton(list,"上一页") { page--; showCatalog(!localCatalog()) }
             if((tab<=2 || localCatalog()) && hasMore) addButton(list,"下一页") { page++; showCatalog(!localCatalog()) }
             if(resumeCards.isNotEmpty()) {

@@ -82,6 +82,27 @@ class PhoneSearchServerTest {
             assertTrue(runCatching { request(server) }.isFailure)
         }
     }
+    @Test fun `phone form preserves its origin and accepts a browser style post`() {
+        val received=CountDownLatch(1); var query=""
+        PhoneSearchServer("127.0.0.1",{ query=it; received.countDown() }).use { server ->
+            val uri=URI(server.url)
+            val page=request(server)
+            assertTrue(page.contains("Referrer-Policy: same-origin\r\n"))
+            val response=request(server,"POST",uri.path+"/submit","query="+URLEncoder.encode("逆江湖","UTF-8"),
+                "Origin: http://${uri.authority}\r\nSec-Fetch-Site: same-origin\r\n")
+            assertTrue(response,response.startsWith("HTTP/1.1 200"))
+            assertTrue(received.await(2,TimeUnit.SECONDS)); assertEquals("逆江湖",query)
+        }
+    }
+    @Test fun `opaque origin stays rejected without consuming the session`() {
+        var submitted=false
+        PhoneSearchServer("127.0.0.1",{ submitted=true }).use { server ->
+            val uri=URI(server.url)
+            val response=request(server,"POST",uri.path+"/submit","query=test","Origin: null\r\n")
+            assertTrue(response,response.startsWith("HTTP/1.1 403")); assertFalse(submitted)
+            assertTrue(request(server).startsWith("HTTP/1.1 200"))
+        }
+    }
     @Test fun `wrong token host and cross site posts cannot submit`() {
         var submitted=false
         PhoneSearchServer("127.0.0.1",{ submitted=true }).use { server ->

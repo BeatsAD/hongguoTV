@@ -320,11 +320,11 @@ class ContentRepositoryTest {
         assertEquals(1,requests)
     }
 
-    @Test fun missingComicTabDoesNotFallBackToShortResults() {
+    @Test fun missingComicTabDoesNotAcceptUnclassifiedWebsiteData() {
         var requests=0
         val repo=repository { requests++; """{"code":0,"search_tabs":[{"tab_type":11,"data":[]}]}""" }
         assertThrows(IOException::class.java) { repo.search("修仙",1,ContentType.COMIC) }
-        assertEquals(1,requests)
+        assertEquals(2,requests)
     }
 
     @Test fun shortSearchKeepsWebsiteFallback() {
@@ -332,9 +332,9 @@ class ContentRepositoryTest {
         val repo=repository { request ->
             paths+=request.url.encodedPath
             if(paths.size==1) throw IOException("offline")
-            """<script>_ROUTER_DATA={"loaderData":{"search_page":{"searchList":[{"series_id":"456","series_name":"测试短剧"}]}}}};</script>"""
+            """{"searchList":[{"doc_type":23,"video_data":{"series_id":"456","series_title":"测试短剧","genre":"203"}}],"pageNum":1,"totalPages":1,"hasMore":false}"""
         }
         assertEquals("456",repo.search("短剧",1,ContentType.SHORT).items.single().id)
-        assertEquals(2,paths.size)
+        assertEquals(listOf("/reading/bookapi/search/tab/v","/api/search/result"),paths)
     }
 }
