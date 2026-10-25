@@ -240,8 +240,10 @@ class ArtworkLoader(context: Context) {
         }.sortedBy { it.priority }.take(MAX_PENDING).forEach(::request)
     }
 
-    private fun fetch(job: Job): Bitmap? {
-        val bytes = disk.get(job.key.url) ?: run {
+    private fun fetch(job: Job,bypassCache: Boolean=false): Bitmap? {
+        var fromCache=true
+        val bytes = (if(bypassCache) null else disk.get(job.key.url)) ?: run {
+            fromCache=false
             if (job.cancelled) return null
             val call = http.newCall(Request.Builder().url(job.key.url).build())
             job.call = call
@@ -260,13 +262,13 @@ class ArtworkLoader(context: Context) {
                     }
                 }
                 if (job.cancelled) return null
-                out.toByteArray().also { disk.put(job.key.url, it) }
+                out.toByteArray()
             }
         }
         if (job.cancelled) return null
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
-        if (bounds.outWidth !in 1..32768 || bounds.outHeight !in 1..32768) return null
+        if (bounds.outWidth !in 1..32768 || bounds.outHeight !in 1..32768) { if(fromCache) { disk.invalidate(job.key.url); return fetch(job,true) }; return null }
         // Fit the entire source into the measured target. Cropping at decode time cannot be
         // undone by ImageView.FIT_CENTER and used to remove most of a portrait poster.
         val fit = min(1.0, min(job.key.width.toDouble() / bounds.outWidth, job.key.height.toDouble() / bounds.outHeight))
@@ -276,12 +278,13 @@ class ArtworkLoader(context: Context) {
         while (bounds.outWidth / (sample * 2) >= width && bounds.outHeight / (sample * 2) >= height) sample *= 2
         if ((bounds.outWidth / sample).toLong() * (bounds.outHeight / sample) > (if (lowRam) 2 else 4) * 1024 * 1024) return null
         val options = BitmapFactory.Options().apply { inSampleSize = sample; inPreferredConfig = Bitmap.Config.ARGB_8888 }
-        val decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options) ?: return null
+        val decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options) ?: run { if(fromCache) { disk.invalidate(job.key.url); return fetch(job,true) }; return null }
         if (job.cancelled) { decoded.recycle(); return null }
         val result = try { Bitmap.createScaledBitmap(decoded, width, height, true) }
         catch (problem: Throwable) { decoded.recycle(); throw problem }
         if (result !== decoded) decoded.recycle()
         if (job.cancelled) { result.recycle(); return null }
+        if(!fromCache) disk.put(job.key.url,bytes)
         return result
     }
 }

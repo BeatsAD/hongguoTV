@@ -32,6 +32,10 @@ class MainActivity: Activity() {
     private val main=Handler(Looper.getMainLooper())
     private val io=Executors.newFixedThreadPool(3)
     private val repository=ContentRepository()
+    private val decoderSupport=VideoDecoderSupport()
+    private val playbackAttempt=PlaybackAttempt()
+    private var saveStatusView: TextView?=null
+    private var restoreAwaitingSave=false
     private val networkCleanup=Executors.newSingleThreadExecutor()
     private val prefetchWorker=Executors.newSingleThreadExecutor()
     private var prefetchHttp: okhttp3.OkHttpClient?=null
@@ -193,7 +197,7 @@ class MainActivity: Activity() {
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
         window.decorView.systemUiVisibility=View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-        library=Library(this); artwork=ArtworkLoader(this); tvTools=TvTools(this); root=FrameLayout(this).apply { setBackgroundColor(bg) }; setContentView(root)
+        library=Library(this,::onLibrarySaveState); artwork=ArtworkLoader(this); tvTools=TvTools(this); root=FrameLayout(this).apply { setBackgroundColor(bg) }; setContentView(root)
         updater=AppUpdater(this) { foreground && library.isLoaded && screen=="catalog" && !tvTools.showing }
         connectivity=getSystemService(ConnectivityManager::class.java)
         runCatching { connectivity.registerDefaultNetworkCallback(networkCallback); networkRegistered=true }
@@ -217,8 +221,21 @@ class MainActivity: Activity() {
         root.removeAllViews(); root.setBackgroundColor(bg)
         val container=column(); val horizontal=dp(widthDp()*.05f); val vertical=(resources.displayMetrics.heightPixels*.05f).toInt()
         container.setPadding(horizontal,vertical,horizontal,vertical); root.addView(container,FrameLayout.LayoutParams(-1,-1))
+        saveStatusView=button("本机改动尚未保存  重试保存") { library.flush() }.apply {
+            visibility=if(library.saveFailed) View.VISIBLE else View.GONE
+            container.addView(this,lp(-1,-2))
+        }
         if(title!=null) { val heading=row(); addButton(heading,"‹ 返回") { goBack() }; heading.addView(text(title,22f).apply { setTypeface(null,Typeface.BOLD) },lp(0,dp(44)).apply { weight=1f }); container.addView(heading) }
         return container
+    }
+    private fun onLibrarySaveState(state: Library.SaveState) {
+        saveStatusView?.takeIf { it.isAttachedToWindow }?.let { view ->
+            val next=if(state==Library.SaveState.SAVED && view.hasFocus()) view.focusSearch(View.FOCUS_DOWN) else null
+            view.visibility=if(state==Library.SaveState.FAILED) View.VISIBLE else View.GONE
+            next?.takeIf { it.isShown }?.requestFocus()
+        }
+        if(state==Library.SaveState.FAILED) Toast.makeText(this,"本机改动尚未保存，请检查可用空间后重试",Toast.LENGTH_LONG).show()
+        else if(restoreAwaitingSave) { restoreAwaitingSave=false; Toast.makeText(this,"记录已合并并保存",Toast.LENGTH_LONG).show() }
     }
     private fun loadCover(view: ImageView,url: String) {
         var ancestor: View?=view
@@ -687,10 +704,10 @@ class MainActivity: Activity() {
         backup=setting(device,"手机备份与恢复") {
             runCatching { LibraryBackup.encode(library.snapshot()) }.onSuccess { encoded ->
                 tvTools.libraryTransfer(encoded,backup) { data,restoreSettings ->
-                    favoriteMonitor.stop(); library.restore(data,restoreSettings)
+                    favoriteMonitor.stop(); restoreAwaitingSave=true; library.restore(data,restoreSettings)
                     tabState.clear(); tabFocus.clear(); catalogFocus=""; page=1
                     showCatalog(); favoriteMonitor.check()
-                    Toast.makeText(this,"记录已合并恢复",Toast.LENGTH_LONG).show()
+                    Toast.makeText(this,"记录已合并，正在保存…",Toast.LENGTH_SHORT).show()
                 }
             }.onFailure { tvTools.info("无法生成备份","本机记录暂时无法导出，请重试。",backup) }
         }
@@ -699,7 +716,7 @@ class MainActivity: Activity() {
             library.unhideAll(); hidden.text="恢复隐藏推荐  ·  0 部"; Toast.makeText(this,"热门推荐已恢复",Toast.LENGTH_SHORT).show()
         }
         lateinit var updates: TextView
-        updates=setting(device,"版本与更新  ·  ${BuildConfig.VERSION_NAME}") { updater.show(updates) }
+        updates=setting(device,"${if(BuildConfig.DEBUG) "应用版本" else "版本与更新"}  ${BuildConfig.VERSION_NAME}") { updater.show(updates) }
         val license=setting(device,"开源许可") {
             AlertDialog.Builder(this).setTitle("开源许可").setMessage("本原生版以 GPL-3.0 发布。\n内容协议与加密处理移植自 drpys（22261ad）。\nAndroidX Media3 / OkHttp：Apache-2.0\nKotlin：Apache-2.0\nBouncy Castle：MIT\n完整源码和许可证见 GitHub：N3urda/hongguoTV-updates。").setPositiveButton("关闭",null).show()
         }
@@ -737,6 +754,7 @@ class MainActivity: Activity() {
         })
     }
     private fun openDetail(series: Series,resume: Boolean=false,autoplay: Boolean=true) {
+        playbackAttempt.clear()
         pendingDetail=series; detailAutoplay=autoplay
         invalidatePage(); releaseCatalogViews(); screen="detail"; directPlayback=resume; detail=null; synopsisExpanded=false
         val body=base(series.title); message(body,"正在加载剧集…")
@@ -762,10 +780,9 @@ class MainActivity: Activity() {
         info.addView(synopsis)
         val actions=row(); actions.setPadding(0,dp(12),0,0); info.addView(actions)
         val progress=library.progress(data.series.id)
-        val resumeIndex=progress?.let { data.episodes.indexOf(it.episodeId).takeIf { n -> n>=0 } } ?: 0
-        val resumePosition=progress?.takeIf { !it.completed && resumeIndex==it.episodeIndex }?.position ?: 0
+        val resumeTarget=ResumePlayback.target(data.episodes,progress?.episodeId,progress?.position ?: 0,progress?.completed==true)
         val watched=library.watched(data.series.id)
-        val play=addButton(actions,if(watched) "重新观看" else if(progress!=null && !progress.completed) "继续第 ${resumeIndex+1} 集" else "开始观看") { playEpisode(if(watched) 0 else if(progress?.completed==true) (resumeIndex+1).coerceAtMost(data.episodes.lastIndex) else resumeIndex,if(watched) 0 else resumePosition) }
+        val play=addButton(actions,if(watched) "重新观看" else if(progress!=null && !progress.completed) "继续第 ${resumeTarget.index+1} 集" else "开始观看") { playEpisode(if(watched) 0 else resumeTarget.index,if(watched) 0 else resumeTarget.position) }
         lateinit var favorite: TextView
         favorite=addButton(actions,if(library.favorite(data.series.id)) "已收藏" else "收藏") {
             favoriteMonitor.stop()
@@ -799,14 +816,18 @@ class MainActivity: Activity() {
         episodes.forEachIndexed { i,v -> v.nextFocusLeftId=if(i%10==0) v.id else episodes[i-1].id; v.nextFocusRightId=if(i%10==9 || i==episodes.lastIndex) v.id else episodes[i+1].id; if(i>=10) v.nextFocusUpId=episodes[i-10].id; v.nextFocusDownId=if(i+10<episodes.size) episodes[i+10].id else v.id }
         if(focusEpisode) episodes.getOrNull((episodeIndex-group*20).coerceIn(0,episodes.lastIndex))?.requestFocus() else play.requestFocus()
     }
-    private fun playEpisode(index: Int,position: Long=0,autoplay: Boolean=true,recovering: Boolean=false) {
+    private fun playEpisode(index: Int,position: Long=0,autoplay: Boolean=true,recovering: Boolean=false,qualityOverride: Int?=null) {
         updater.interrupt()
         val data=detail ?: return
         val playbackStarted=android.os.SystemClock.elapsedRealtime()
         val reuse=screen=="player" && player!=null && playerView!=null && !recovering && !playError
         library.setWatched(data.series.id,false)
         val selectedIndex=index.coerceIn(0,data.episodes.lastIndex)
-        val prefetched=if(position==0L && !recovering) preparedNext.take("${data.episodes[selectedIndex]}:${library.maxQuality}") else null
+        val requestedId=data.episodes[selectedIndex]
+        playbackAttempt.begin(requestedId,qualityOverride)
+        val maxQuality=playbackAttempt.quality(library.maxQuality)
+        val rejected=playbackAttempt.rejectedVariants()
+        val prefetched=if(position==0L && !recovering && rejected.isEmpty()) preparedNext.take("$requestedId:$maxQuality") else null
         val claimedHttp=if(prefetched!=null) prefetchHttp.also { prefetchHttp=null } else null
         saveProgress(); library.flush(); invalidatePage(); favoriteMonitor.stop(); releaseCatalogViews()
         if(reuse) {
@@ -847,8 +868,8 @@ class MainActivity: Activity() {
         playbackText.text="正在获取播放地址…"; progressBar.progress=0; progressBar.visibility=View.VISIBLE; hidePlaybackOverlay()
         controls.removeAllViews(); controls.visibility=View.GONE; transportPlay=null; sleepButton=null
         syncMediaSession()
-        val requestedId=data.episodes[episodeIndex]; val maxQuality=library.maxQuality; val ticket=generation
-        work({ prefetched ?: RemoteVideo(repository.http,repository.stream(requestedId,maxQuality)).prepare() }, { remote ->
+        val ticket=generation
+        work({ prefetched ?: RemoteVideo(repository.http,repository.stream(requestedId,maxQuality) { it.variantKey !in rejected && decoderSupport.supports(it) }).prepare() }, { remote ->
             video=remote; quality=remote.info.quality
             val p=player ?: run {
                 val load=DefaultLoadControl.Builder().setBufferDurationsMs(15000,30000,1000,2000).setTargetBufferBytes(12*1024*1024).build()
@@ -925,7 +946,7 @@ class MainActivity: Activity() {
             var remote: RemoteVideo?=null
             try {
                 val prepared=scope.run {
-                    RemoteVideo(http,source.stream(id,quality)).also { remote=it; it.warm() }
+                    RemoteVideo(http,source.stream(id,quality,decoderSupport::supports)).also { remote=it; it.warm() }
                 }
                 if(preparedNext.complete(ticket,key,prepared)) android.util.Log.i("HongguoTV","Next episode prepared near end")
             } catch(_: Exception) { remote?.close() }
@@ -946,13 +967,18 @@ class MainActivity: Activity() {
         retryPosition=currentPosition().coerceAtLeast(0); retryAutoplay=requestedAutoplay && !sleepStopped
         saveProgress(); cancelRecovery(); cancelPrefetch()
         playError=true; player?.pause(); progressBar.visibility=View.GONE; hud.visibility=View.VISIBLE; controls.removeAllViews(); controls.visibility=View.VISIBLE; panel=true
-        val decoding=problem is PlaybackException && problem.errorCode in 3000..4999
-        val retryable=if(problem is PlaybackException) problem.errorCode in 2000..2999 || problem.errorCode==PlaybackException.ERROR_CODE_TIMEOUT else problem is java.io.IOException
-        val upstreamMessage=problem.message?.takeIf { problem is java.io.IOException && it.startsWith("播放接口") }
-        playbackText.text=if(decoding) "电视无法解码当前视频，可尝试更低清晰度。" else upstreamMessage ?: "播放失败，可重试或切换清晰度。"
+        val decoding=problem is PlaybackException && problem.errorCode in 4000..4999
+        if(decoding && playbackAttempt.rejectDecoder(video?.info)) {
+            playEpisode(episodeIndex,retryPosition,retryAutoplay,recovering=true)
+            return
+        }
+        val source=PlaybackErrors.source(problem)
+        val retryable=if(source!=null) PlaybackErrors.retryable(source) else if(problem is PlaybackException) problem.errorCode in 2000..2999 || problem.errorCode==PlaybackException.ERROR_CODE_TIMEOUT else PlaybackErrors.retryable(problem)
+        val upstreamMessage=source?.message
+        playbackText.text=if(decoding) "电视无法解码当前视频，可尝试更低清晰度。" else upstreamMessage ?: if(problem is PlaybackException && problem.errorCode in 3000..3999) "视频格式无法解析，请换一部剧或更新应用。" else "播放失败，可重试或切换清晰度。"
         val actions=row(); controls.addView(actions)
-        addButton(actions,"立即重试") { playEpisode(episodeIndex,retryPosition,retryAutoplay) }.requestFocus()
-        addButton(actions,"尝试 720P") { library.maxQuality=720; playEpisode(episodeIndex,retryPosition,retryAutoplay) }
+        addButton(actions,"立即重试") { playbackAttempt.clear(); playEpisode(episodeIndex,retryPosition,retryAutoplay) }.requestFocus()
+        addButton(actions,"本集尝试 720P") { playbackAttempt.clear(); playEpisode(episodeIndex,retryPosition,retryAutoplay,qualityOverride=720) }
         addButton(actions,"返回选集") { returnToDetail(true) }
         if(retryable && !sleepStopped) {
             addButton(controls,"停止自动重试") { cancelRecovery(); playbackText.text="自动重试已停止，观看位置已保留。" }
@@ -1098,10 +1124,10 @@ class MainActivity: Activity() {
         val options=PlaybackQuality.options
         val dialog=AlertDialog.Builder(this).setTitle("全局默认清晰度")
             .setSingleChoiceItems(options.map { "${it}P" }.toTypedArray(),options.indexOf(library.maxQuality)) { popup,index ->
-                val target=options[index]; val changed=library.maxQuality!=target
+                val target=options[index]; val changed=library.maxQuality!=target || (inPlayer && playbackAttempt.quality(library.maxQuality)!=target)
                 library.maxQuality=target; popup.dismiss()
                 if(anchor.tag!="playback-settings") anchor.text=(if(inPlayer) "清晰度 " else "默认清晰度  ·  ")+"${target}P"
-                if(inPlayer && changed) playEpisode(episodeIndex,currentPosition(),player?.playWhenReady ?: requestedAutoplay)
+                if(inPlayer && changed) { playbackAttempt.clear(); playEpisode(episodeIndex,currentPosition(),player?.playWhenReady ?: requestedAutoplay) }
             }.setNegativeButton("取消",null).create()
         dialog.setOnDismissListener { if(anchor.isAttachedToWindow) anchor.requestFocus() }
         dialog.show()
@@ -1148,6 +1174,7 @@ class MainActivity: Activity() {
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
     private fun returnToDetail(forceDetail: Boolean=false) {
+        playbackAttempt.clear()
         sleepTimer.cancel(); sleepStopped=false; saveProgress(); library.flush(); invalidatePage(); releasePlayer()
         if(directPlayback && !forceDetail) showCatalog() else { directPlayback=false; showDetail(true) }
     }

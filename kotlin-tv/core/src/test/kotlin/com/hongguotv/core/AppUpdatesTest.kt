@@ -18,7 +18,8 @@ class AppUpdatesTest {
     private fun update() = AppUpdate.parse(json().toString())
     private fun withFile(block: (File) -> Unit) {
         val dir = Files.createTempDirectory("update-test").toFile()
-        try { block(File(dir, "update.apk")) } finally { dir.deleteRecursively() }
+        // Retain this test's temporary directory; workspace policy forbids recursive cleanup.
+        block(File(dir, "update.apk"))
     }
     @Test fun onlyHigherCompatibleVersionsAreUpdates() {
         val update = update()

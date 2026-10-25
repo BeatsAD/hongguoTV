@@ -11,6 +11,8 @@ import java.net.SocketTimeoutException
 import java.net.URLDecoder
 import java.security.SecureRandom
 import java.util.Locale
+import java.util.Timer
+import java.util.TimerTask
 import java.util.concurrent.atomic.AtomicBoolean
 
 /** A one-use, short-lived LAN form. No cookies, platform credentials or external resources. */
@@ -18,35 +20,44 @@ class PhoneSearchServer(
     address: String,
     private val onQuery: (String)->Unit,
     private val onExpired: ()->Unit = {},
-    ttlMillis: Long = 300_000
+    ttlMillis: Long = 300_000,
+    private val requestTimeoutMillis: Int = 10_000
 ): Closeable {
     private val stopped=AtomicBoolean(false)
     private val consumed=AtomicBoolean(false)
     private val localAddress=InetAddress.getByName(address).also { require(it.isLoopbackAddress || it.isSiteLocalAddress) }.hostAddress
-    private val listener=ServerSocket(0,4).apply { soTimeout=500 }
+    private val listener=ServerSocket(0,4,InetAddress.getByName(localAddress)).apply { soTimeout=500 }
+    private val expiry=Timer("hongguotv-phone-expiry",true)
+    @Volatile private var active: Socket?=null
     private val deadline=System.nanoTime()+ttlMillis.coerceIn(1,300_000)*1_000_000
     private val token=ByteArray(16).also { SecureRandom().nextBytes(it) }.joinToString("") { "%02x".format(it.toInt() and 255) }
     private val host="$localAddress:${listener.localPort}"
     val url="http://$host/$token"
     private val thread=Thread({ serve() },"hongguotv-phone-input").apply { isDaemon=true }
     init {
+        require(requestTimeoutMillis in 1..10_000)
+        expiry.schedule(object: TimerTask() { override fun run()=expire() },ttlMillis.coerceIn(1,300_000))
         thread.start()
     }
-    override fun close() { stopped.set(true); runCatching { listener.close() } }
+    private fun expire() { if(stopped.compareAndSet(false,true)) { close(); if(!consumed.get()) onExpired() } }
+    override fun close() { stopped.set(true); expiry.cancel(); runCatching { listener.close() }; runCatching { active?.close() } }
     private fun serve() {
         try {
             while(!stopped.get() && System.nanoTime()<deadline) {
                 val client=try { listener.accept() } catch(_: SocketTimeoutException) { continue }
+                active=client
                 client.use { socket ->
-                    socket.soTimeout=2000
-                    try { handle(socket) } catch(_: Exception) { /* Discard malformed or disconnected requests. */ }
+                    val timeout=object: TimerTask() { override fun run() { runCatching { socket.close() } } }
+                    expiry.schedule(timeout,requestTimeoutMillis.toLong())
+                    try { socket.soTimeout=minOf(2000,requestTimeoutMillis); if(!stopped.get()) handle(socket) }
+                    catch(_: Exception) { /* Discard malformed, slow or disconnected requests. */ }
+                    finally { timeout.cancel() }
                 }
+                active=null
             }
         } catch(_: Exception) { /* Closing the dialog interrupts accept(). */ }
         finally {
-            val expired=!stopped.get() && !consumed.get()
-            close()
-            if(expired) onExpired()
+            if(!stopped.get()) expire() else close()
         }
     }
     private fun line(input: InputStream, max: Int): String {

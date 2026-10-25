@@ -106,9 +106,11 @@
 
 ```sh
 # 仓库根目录：开发包直接可安装，无需发布私钥
-./kotlin-tv/gradlew -p kotlin-tv :core:test :app:lintDebug :app:assembleDebug
+./kotlin-tv/gradlew -p kotlin-tv :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 adb install -r kotlin-tv/app/build/outputs/apk/debug/app-debug.apk
 ```
+
+本地 Debug 包使用独立包名 `com.hongguotv.nativeapp.playbackfix`，设置中仅显示应用版本；不检查或下载上游正式更新，也不请求安装其他应用的权限。Debug 包由本地重新构建安装更新。
 
 正式 APK 使用独立发布密钥，**私钥和口令不在 GitHub 中**。重建发布包时，配置以下环境变量，或创建被 Git 忽略的 `kotlin-tv/keystore.properties`：
 

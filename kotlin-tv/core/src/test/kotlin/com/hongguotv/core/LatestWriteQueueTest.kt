@@ -6,6 +6,28 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 class LatestWriteQueueTest {
+    @Test fun `failed write remains pending until a durable retry succeeds`() {
+        val failed=CountDownLatch(1); val saved=CountDownLatch(1)
+        val permit=java.util.concurrent.atomic.AtomicBoolean(false)
+        val queue=LatestWriteQueue<String,Int>("test-save-state",60_000,write={ permit.get() },failed={ failed.countDown() },saved={ saved.countDown() })
+        try {
+            queue.submit(mapOf("favorites" to 3)); queue.flush()
+            assertTrue(failed.await(2,TimeUnit.SECONDS)); assertTrue(queue.hasPendingWrites())
+            assertEquals(1L,saved.count)
+            permit.set(true); queue.flush()
+            assertTrue(saved.await(2,TimeUnit.SECONDS)); assertFalse(queue.hasPendingWrites())
+        } finally { queue.close(); assertTrue(queue.awaitClosed(2,TimeUnit.SECONDS)) }
+    }
+
+    @Test fun `in flight write is not reported as already saved`() {
+        val writing=CountDownLatch(1); val finish=CountDownLatch(1); val saved=CountDownLatch(1)
+        val queue=LatestWriteQueue<String,Int>("test-inflight-state",0,write={ writing.countDown(); finish.await(2,TimeUnit.SECONDS) },saved={ saved.countDown() })
+        try {
+            queue.submit(mapOf("progress" to 7))
+            assertTrue(writing.await(2,TimeUnit.SECONDS)); assertTrue(queue.hasPendingWrites()); assertEquals(1L,saved.count)
+            finish.countDown(); assertTrue(saved.await(2,TimeUnit.SECONDS)); assertFalse(queue.hasPendingWrites())
+        } finally { finish.countDown(); queue.close(); assertTrue(queue.awaitClosed(2,TimeUnit.SECONDS)) }
+    }
     @Test fun `close drains latest values for every partition without caller serialization`() {
         val committed = mutableListOf<Map<String, Int>>()
         val caller = Thread.currentThread()

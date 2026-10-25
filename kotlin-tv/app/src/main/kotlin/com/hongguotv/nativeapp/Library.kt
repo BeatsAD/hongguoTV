@@ -14,7 +14,9 @@ import java.util.concurrent.TimeUnit
 typealias WatchProgress = BackupProgress
 
 /** Memory-only UI access; disk reads, JSON serialization and commits run on workers. */
-class Library(context: Context) {
+class Library(context: Context,private val saveState: (SaveState)->Unit = {}) {
+    enum class SaveState { SAVED, FAILED }
+    var saveFailed=false; private set
     private companion object {
         // A replacement Activity must not load before its predecessor's final checkpoint commits.
         val retiredWrites = mutableListOf<LatestWriteQueue<String, () -> Any?>>()
@@ -25,7 +27,10 @@ class Library(context: Context) {
     private val prefs by lazy { app.getSharedPreferences("native-library-v1", Context.MODE_PRIVATE) }
     private val homePrefs by lazy { app.getSharedPreferences("native-home-cache-v1", Context.MODE_PRIVATE) }
     private val writes = LatestWriteQueue<String, () -> Any?>("hongguotv-library-write", write = { batch -> commit(prefs, batch) },
-        failed = { Log.w("HongguoTV", "Local library commit failed; pending changes retained for retry") })
+        failed = {
+            Log.w("HongguoTV", "Local library commit failed; pending changes retained for retry")
+            main.post { if(!closed && !saveFailed) { saveFailed=true; saveState(SaveState.FAILED) } }
+        }, saved = ::reportSaved)
     private val homeWrites = LatestWriteQueue<String, () -> Any?>("hongguotv-home-write", write = { batch -> commit(homePrefs, batch) },
         failed = { Log.w("HongguoTV", "Home cache commit failed") })
     private var index: LibraryIndex? = null
@@ -36,6 +41,7 @@ class Library(context: Context) {
     private val readyCallbacks = mutableListOf<() -> Unit>()
     private val errorCallbacks = mutableListOf<(Throwable) -> Unit>()
     val isLoaded get() = index != null
+    private fun reportSaved() { main.post { if(!closed && !writes.hasPendingWrites()) { saveFailed=false; saveState(SaveState.SAVED) } } }
 
     /** Call before showing the first page. Successful/error callbacks run on the main thread. */
     fun loadAsync(onFailure: (Throwable) -> Unit = { Log.e("HongguoTV", "Local library failed to load", it) }, onReady: () -> Unit) {

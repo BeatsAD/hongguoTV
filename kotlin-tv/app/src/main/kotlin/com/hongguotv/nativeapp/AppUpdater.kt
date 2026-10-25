@@ -27,6 +27,7 @@ import java.util.concurrent.Future
 
 /** Foreground-only updater: no background service, and no networking or prompts during playback. */
 class AppUpdater(private val activity: Activity, private val idle: () -> Boolean) {
+    private val enabled=!BuildConfig.DEBUG && BuildConfig.APPLICATION_ID=="com.hongguotv.nativeapp"
     private val main = Handler(Looper.getMainLooper())
     private val worker = Executors.newSingleThreadExecutor()
     private val repository = AppUpdateRepository()
@@ -64,6 +65,7 @@ class AppUpdater(private val activity: Activity, private val idle: () -> Boolean
         }
     }
     fun resume() {
+        if(!enabled) return
         active = true; main.removeCallbacks(poll); main.postDelayed(poll, 8000)
         if (permissionRequested) {
             permissionRequested = false
@@ -93,6 +95,12 @@ class AppUpdater(private val activity: Activity, private val idle: () -> Boolean
         }
     }
     fun show(from: View?) {
+        if(!enabled) {
+            dialog?.dismiss()
+            dialog=AlertDialog.Builder(activity).setTitle("应用版本").setMessage("当前版本 ${BuildConfig.VERSION_NAME}\n开发测试版通过本地安装更新，不连接上游自动更新渠道。")
+                .setPositiveButton("关闭",null).create().apply { setOnDismissListener { dialog=null; if(from?.isAttachedToWindow==true) from.requestFocus() }; show() }
+            return
+        }
         if (!active) return
         anchor = from
         dialog?.dismiss()

@@ -40,7 +40,7 @@ class ContentRepositoryTest {
             calls++
             inlineModel(Triple(1080,"bytevc2","https://example.com/unsupported"),Triple(1080,"h264","https://example.com/high"),Triple(480,"h264","https://example.com/low"))
         }
-        assertEquals(StreamInfo("https://example.com/low",null,"480P"),repo.stream("123",720))
+        assertEquals(StreamInfo("https://example.com/low",null,"480P",codec="h264"),repo.stream("123",720))
         assertEquals(1,calls)
     }
 
@@ -69,6 +69,40 @@ class ContentRepositoryTest {
     @Test fun encryptedInlineResourceWithoutKeyIsNotTreatedAsClearVideo() {
         val body=inlineModel(Triple(720,"h264","https://example.com/encrypted")).replace("\"encrypt\":false","\"encrypt\":true")
         assertThrows(IOException::class.java) { repository { body }.stream("123") }
+    }
+
+    @Test fun malformedEncryptedTierDoesNotDiscardAHealthyTier() {
+        val body=JSONObject(inlineModel(Triple(1080,"h264","https://example.com/bad"),Triple(720,"h264","https://example.com/good")))
+        body.getJSONObject("data").getJSONObject("123").getJSONObject("video_model").getJSONArray("video_list")
+            .getJSONObject(0).getJSONObject("encrypt_info").put("spade_a","invalid-base64!")
+        assertEquals("https://example.com/good",repository { body.toString() }.stream("123").url)
+    }
+
+    @Test fun decoderPredicateReceivesDimensionsAndCanSelectLowerTier() {
+        val body=JSONObject(inlineModel(Triple(1080,"h264","https://example.com/large"),Triple(720,"h264","https://example.com/small")))
+        val rows=body.getJSONObject("data").getJSONObject("123").getJSONObject("video_model").getJSONArray("video_list")
+        rows.getJSONObject(0).getJSONObject("video_meta").put("vwidth",1080).put("vheight",1920).put("fps",30)
+        rows.getJSONObject(1).getJSONObject("video_meta").put("vwidth",720).put("vheight",1280).put("fps",25)
+        val seen=mutableListOf<StreamInfo>()
+        val selected=repository { body.toString() }.stream("123") { stream -> seen+=stream; stream.height!!<=1280 }
+        assertEquals("https://example.com/small",selected.url)
+        assertEquals(720,selected.width); assertEquals(1280,selected.height); assertEquals(25.0,selected.frameRate!!,0.0)
+        assertEquals(2,seen.size)
+    }
+
+    @Test fun allDeviceRejectedTiersStopWithoutNetworkRetries() {
+        val error=assertThrows(PlaybackSourceException::class.java) {
+            repository { inlineModel(Triple(1080,"h264","https://example.com/large")) }.stream("123") { false }
+        }
+        assertEquals(PlaybackFailureKind.UNSUPPORTED,error.kind)
+        assertFalse(PlaybackErrors.retryable(error))
+    }
+
+    @Test fun rejectedApiAndInvalidJsonAreNotTemporaryNetworkFailures() {
+        val rejected=assertThrows(PlaybackSourceException::class.java) { repository { """{"code":110001}""" }.stream("123") }
+        val malformed=assertThrows(PlaybackSourceException::class.java) { repository { "<html>error</html>" }.stream("123") }
+        assertFalse(PlaybackErrors.retryable(rejected)); assertFalse(PlaybackErrors.retryable(malformed))
+        assertEquals(PlaybackFailureKind.FORMAT,malformed.kind)
     }
 
     private fun streamRepository(vararg variants: Triple<Int,String,String>) = repository { request ->

@@ -22,7 +22,10 @@ data class Detail(val series: Series, val episodes: List<String>)
 data class RankPosition(val rank: Int?, val heat: String)
 data class ComicRanking(val positions: Map<String,RankPosition>, val totalPages: Int, val updatedText: String)
 data class CatalogPage(val items: List<Series>, val hasMore: Boolean, val ranking: ComicRanking? = null)
-data class StreamInfo(val url: String, val key: ByteArray?, val quality: String)
+data class StreamInfo(val url: String, val key: ByteArray?, val quality: String,
+    val codec: String="", val width: Int?=null, val height: Int?=null, val frameRate: Double?=null) {
+    val variantKey get()="${quality.substringBefore('（')}:$codec:${width}x$height"
+}
 class SearchSessionExpiredException: IOException("搜索结果已过期，请从第 1 页重新搜索")
 
 class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectTimeout(15,TimeUnit.SECONDS).readTimeout(30,TimeUnit.SECONDS).callTimeout(45,TimeUnit.SECONDS).build(), private val clock: () -> Long = System::currentTimeMillis) {
@@ -40,7 +43,7 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
         signed?.headers?.forEach { (k,v) -> request.header(k,v) }
         signed?.body?.let { request.post(it.toRequestBody("application/json; charset=utf-8".toMediaType())) }
         return RequestScope.execute(http.newCall(request.build())) { response ->
-            if (!response.isSuccessful) throw IOException("内容请求失败（HTTP ${response.code}）")
+            if (!response.isSuccessful) throw PlaybackSourceException(if(PlaybackErrors.retryableHttp(response.code)) PlaybackFailureKind.NETWORK else PlaybackFailureKind.SOURCE,"内容请求失败（HTTP ${response.code}）")
             val body = response.body ?: throw IOException("内容响应为空")
             if (body.contentLength() > 16*1024*1024) throw IOException("内容响应过大")
             val input=body.byteStream(); val out=java.io.ByteArrayOutputStream(); val buffer=ByteArray(8192)
@@ -129,7 +132,7 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
         if(episodes.isEmpty() || episodes.any { !it.matches(Regex("[0-9]{1,30}")) } || episodes.distinct().size!=episodes.size) throw IOException("分集数据异常")
         return Detail(card(o).copy(id=id),episodes)
     }
-    fun stream(id: String, maxQuality: Int = 1080): StreamInfo {
+    fun stream(id: String, maxQuality: Int = 1080, supported: (StreamInfo)->Boolean = { true }): StreamInfo {
         require(id.matches(Regex("[0-9]{1,30}")))
         val payload="""{"biz_param":{"detail_page_version":0,"device_level":3,"disable_digg_stat":false,"need_all_video_definition":true,"need_mp4_align":false,"use_os_player":false,"use_server_dns":false,"video_platform":1024},"mixed_video_id_map":{"1004":["$id"]}}""".toByteArray()
         // Adapted from tsukiyo-zero/hongguoTV 88c6238, GPL-3.0; see NOTICE.md.
@@ -140,43 +143,57 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
             "Accept" to "application/json; charset=utf-8,application/x-protobuf"
         ),payload)
         val response=text(playerUrl,request)
-        if(response.isBlank()) throw IOException("播放接口返回空响应，请稍后重试或更新应用")
-        val data=JSONObject(response)
+        if(response.isBlank()) throw PlaybackSourceException(PlaybackFailureKind.SOURCE,"播放接口返回空响应，请稍后重试或更新应用")
+        val data=try { JSONObject(response) } catch(_: Exception) { throw PlaybackSourceException(PlaybackFailureKind.FORMAT,"播放信息格式已变化，请更新应用") }
         val code=data.optInt("Code",data.optInt("code",0))
-        if(code!=0) throw IOException("播放接口暂不可用（错误码 $code）")
-        val map=data.optJSONObject("data") ?: throw IOException("播放信息为空")
-        val entry=map.optJSONObject(id) ?: throw IOException("播放信息没有对应剧集")
-        val model=entry.optJSONObject("video_model") ?: JSONObject(entry.str("video_model"))
+        if(code!=0) throw PlaybackSourceException(PlaybackFailureKind.SOURCE,"播放接口暂不可用（错误码 $code）")
+        val map=data.optJSONObject("data") ?: throw PlaybackSourceException(PlaybackFailureKind.FORMAT,"播放信息为空")
+        val entry=map.optJSONObject(id) ?: throw PlaybackSourceException(PlaybackFailureKind.FORMAT,"播放信息没有对应剧集")
+        val model=entry.optJSONObject("video_model") ?: try { JSONObject(entry.str("video_model")) } catch(_: Exception) { throw PlaybackSourceException(PlaybackFailureKind.FORMAT,"播放信息格式已变化，请更新应用") }
         // Current models carry renditions directly; avoid a second legacy fallback request.
         val inline=model.optJSONArray("video_list")?.objects().orEmpty().mapNotNull { row ->
-            val meta=row.optJSONObject("video_meta") ?: return@mapNotNull null
-            val encryption=row.optJSONObject("encrypt_info") ?: return@mapNotNull null
-            val codec=meta.str("codec_type").lowercase(); val mediaUrl=cleanUrl(row.str("main_url"))
-            if(codec.isBlank() || codec in setOf("bytevc2","bvc2") || (!mediaUrl.startsWith("https://") && !mediaUrl.startsWith("http://"))) return@mapNotNull null
-            val key=encryption.str("spade_a").takeIf { it.isNotBlank() }?.let(MediaCrypto::deriveKey)
-            if(key==null && encryption.opt("encrypt") !in listOf(false,0,"0","false")) return@mapNotNull null
-            val height=qualityNumber(meta.str("definition").ifEmpty { meta.str("vheight") })
-            Triple(height,codec,StreamInfo(mediaUrl,key,if(height>0) "${height}P" else "自动"))
-        }.sortedWith(compareByDescending<Triple<Int,String,StreamInfo>> { it.first }.thenByDescending { it.second in setOf("h264","avc","avc1") })
-        val direct=inline.firstOrNull { it.first<=maxQuality } ?: inline.minWithOrNull(compareBy<Triple<Int,String,StreamInfo>> { it.first }.thenByDescending { it.second in setOf("h264","avc","avc1") })
-        if(direct!=null) return if(direct.first>maxQuality) direct.third.copy(quality=direct.third.quality+"（兼容资源）") else direct.third
-        val raw=model.opt("fallback_api") ?: throw IOException("没有电视可播放的清晰度，请稍后再试或选择其他剧集")
+            try {
+                val meta=row.optJSONObject("video_meta") ?: return@mapNotNull null
+                val encryption=row.optJSONObject("encrypt_info") ?: return@mapNotNull null
+                if(meta.str("codec_type").isBlank()) return@mapNotNull null
+                val key=encryption.str("spade_a").takeIf { it.isNotBlank() }?.let(MediaCrypto::deriveKey)
+                if(key==null && encryption.opt("encrypt") !in listOf(false,0,"0","false")) return@mapNotNull null
+                candidate(cleanUrl(row.str("main_url")),key,meta,meta.str("definition").ifEmpty { meta.str("vheight") })
+            } catch(_: Exception) { null } // A malformed rendition must not discard other valid tiers.
+        }
+        if(inline.isNotEmpty()) return selectStream(inline,maxQuality,supported)
+        val raw=model.opt("fallback_api") ?: throw PlaybackSourceException(PlaybackFailureKind.UNSUPPORTED,"没有电视可播放的清晰度，请稍后再试或选择其他剧集")
         val fallback=when(raw) { is JSONObject -> raw.str("fallback_api"); is JSONArray -> raw.optString(0); else -> runCatching { JSONObject(raw.toString()).str("fallback_api") }.getOrDefault(raw.toString()) }
-        if(!fallback.startsWith("https://")) throw IOException("播放地址格式异常")
-        val info=JSONObject(text(fallback)).optJSONObject("video_info")?.optJSONObject("data") ?: throw IOException("没有播放资源")
-        val videoList=info.optJSONObject("video_list") ?: throw IOException("没有可用清晰度")
+        if(!fallback.startsWith("https://")) throw PlaybackSourceException(PlaybackFailureKind.FORMAT,"播放地址格式异常")
+        val info=try { JSONObject(text(fallback)).optJSONObject("video_info")?.optJSONObject("data") } catch(e: IOException) { throw e } catch(_: Exception) { throw PlaybackSourceException(PlaybackFailureKind.FORMAT,"播放信息格式已变化，请更新应用") }
+            ?: throw PlaybackSourceException(PlaybackFailureKind.FORMAT,"没有播放资源")
+        val videoList=info.optJSONObject("video_list") ?: throw PlaybackSourceException(PlaybackFailureKind.UNSUPPORTED,"没有可用清晰度")
         // ByteVC2 resources can expose playable audio but no video track in Android's MP4 extractor.
         // Keep missing legacy codec labels usable, but never select a known incompatible variant.
-        val rows=videoList.keys().asSequence().mapNotNull { k -> videoList.optJSONObject(k)?.let { k to it } }.filter {
-            it.second.str("main_url").isNotEmpty() && it.second.str("codec_type").lowercase() !in setOf("bytevc2","bvc2")
-        }.map { (k,o) -> Triple(qualityNumber(o.str("quality_desc").ifEmpty { o.str("height").ifEmpty { o.str("vheight").ifEmpty { o.str("quality").ifEmpty { k } } } }),k,o) }.sortedByDescending { it.first }.toList()
-        val selected=rows.firstOrNull { it.first<=maxQuality } ?: rows.lastOrNull() ?: throw IOException("没有电视可播放的清晰度，请稍后再试或选择其他剧集")
-        val item=selected.third; var url=cleanUrl(item.str("main_url")); val seed=info.str("key_seed")
-        if(seed.isNotEmpty()) url=MediaCrypto.decryptUrl(url,decode64(seed))
-        if(!url.startsWith("https://") && !url.startsWith("http://")) throw IOException("播放地址无效")
-        val key=item.str("spade_a").takeIf { it.isNotEmpty() }?.let(MediaCrypto::deriveKey)
-        val quality=if(selected.first>0) "${selected.first}P"+(if(selected.first>maxQuality) "（兼容资源）" else "") else "自动"
-        return StreamInfo(url,key,quality)
+        val rows=videoList.keys().asSequence().mapNotNull { k ->
+            val item=videoList.optJSONObject(k) ?: return@mapNotNull null
+            try {
+                var url=cleanUrl(item.str("main_url")); val seed=info.str("key_seed")
+                if(seed.isNotEmpty()) url=MediaCrypto.decryptUrl(url,decode64(seed))
+                val key=item.str("spade_a").takeIf { it.isNotEmpty() }?.let(MediaCrypto::deriveKey)
+                candidate(url,key,item,item.str("quality_desc").ifEmpty { item.str("height").ifEmpty { item.str("vheight").ifEmpty { item.str("quality").ifEmpty { k } } } })
+            } catch(_: Exception) { null }
+        }.toList()
+        return selectStream(rows,maxQuality,supported)
+    }
+    private fun candidate(url: String,key: ByteArray?,meta: JSONObject,label: String): StreamInfo? {
+        val codec=meta.str("codec_type").lowercase()
+        if(codec in setOf("bytevc2","bvc2") || (!url.startsWith("https://") && !url.startsWith("http://"))) return null
+        val quality=qualityNumber(label)
+        fun dimension(primary: String,secondary: String)=meta.optInt(primary,meta.optInt(secondary)).takeIf { it>0 }
+        return StreamInfo(url,key,if(quality>0) "${quality}P" else "自动",codec,dimension("vwidth","width"),dimension("vheight","height"),
+            meta.str("fps").ifEmpty { meta.str("frame_rate") }.toDoubleOrNull()?.takeIf { it.isFinite() && it>0 })
+    }
+    private fun selectStream(rows: List<StreamInfo>,maxQuality: Int,supported: (StreamInfo)->Boolean): StreamInfo {
+        val valid=rows.filter(supported).sortedWith(compareByDescending<StreamInfo> { qualityNumber(it.quality) }.thenByDescending { it.codec in setOf("h264","avc","avc1") })
+        val selected=valid.firstOrNull { qualityNumber(it.quality)<=maxQuality } ?: valid.lastOrNull()?.let { lowest -> valid.first { qualityNumber(it.quality)==qualityNumber(lowest.quality) } }
+            ?: throw PlaybackSourceException(PlaybackFailureKind.UNSUPPORTED,"没有电视可播放的清晰度，请稍后再试或选择其他剧集")
+        return if(qualityNumber(selected.quality)>maxQuality) selected.copy(quality=selected.quality+"（兼容资源）") else selected
     }
     companion object {
         fun extractRouter(html: String): JSONObject {

@@ -7,6 +7,8 @@ import androidx.media3.datasource.BaseDataSource
 import androidx.media3.datasource.DataSpec
 import com.hongguotv.core.RemoteVideo
 
+internal fun videoReadCount(requested: Int,buffered: Int,remaining: Long)=minOf(requested.toLong(),buffered.toLong(),remaining).toInt()
+
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class VideoDataSource(private val video: RemoteVideo): BaseDataSource(true) {
     private var position=0L
@@ -26,7 +28,7 @@ class VideoDataSource(private val video: RemoteVideo): BaseDataSource(true) {
         if(remaining==0L) return C.RESULT_END_OF_INPUT
         if(offset>=buffer.size) { buffer=video.read(position,minOf(512*1024L,remaining).toInt()); offset=0 }
         if(buffer.isEmpty()) throw java.io.EOFException("视频分段意外结束")
-        val count=minOf(length,buffer.size-offset,remaining.toInt())
+        val count=videoReadCount(length,buffer.size-offset,remaining)
         buffer.copyInto(target,targetOffset,offset,offset+count); offset+=count; position+=count; remaining-=count; bytesTransferred(count); return count
     }
     override fun getUri()=uri

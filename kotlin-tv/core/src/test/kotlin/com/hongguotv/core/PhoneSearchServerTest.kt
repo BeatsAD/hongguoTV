@@ -5,10 +5,62 @@ import org.junit.Test
 import java.net.Socket
 import java.net.URI
 import java.net.URLEncoder
+import java.net.InetSocketAddress
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 class PhoneSearchServerTest {
+    @Test fun `listener is bound to the selected address`() {
+        PhoneSearchServer("127.0.0.1",{}).use { server ->
+            val uri=URI(server.url)
+            assertTrue(request(server).startsWith("HTTP/1.1 200"))
+            Socket().use { socket ->
+                assertTrue(runCatching { socket.connect(InetSocketAddress("127.0.0.2",uri.port),300) }.isFailure)
+            }
+        }
+    }
+    @Test fun `close interrupts an accepted incomplete request`() {
+        PhoneSearchServer("127.0.0.1",{}).use { server ->
+            val uri=URI(server.url)
+            Socket("127.0.0.1",uri.port).use { socket ->
+                socket.soTimeout=1500
+                socket.getOutputStream().write("GET / HTTP/1.1\r\nHost: ".toByteArray())
+                server.close()
+                try { assertEquals(-1,socket.getInputStream().read()) } catch(_: java.net.SocketException) { /* Reset also proves the accepted socket was closed. */ }
+            }
+        }
+    }
+    @Test fun `request deadline frees the single worker for another phone`() {
+        PhoneSearchServer("127.0.0.1",{},requestTimeoutMillis=150).use { server ->
+            val uri=URI(server.url)
+            Socket("127.0.0.1",uri.port).use { socket ->
+                socket.soTimeout=1500
+                socket.getOutputStream().write("GET / HTTP/1.1\r\nX-Slow: ".toByteArray())
+                val sending=java.util.concurrent.atomic.AtomicBoolean(true)
+                val writer=Thread {
+                    while(sending.get()) {
+                        if(runCatching { socket.getOutputStream().write('.'.code); Thread.sleep(30) }.isFailure) break
+                    }
+                }.apply { start() }
+                try { assertEquals(-1,socket.getInputStream().read()) }
+                finally { sending.set(false); writer.join(1000) }
+                assertFalse(writer.isAlive)
+            }
+            assertTrue(request(server).startsWith("HTTP/1.1 200"))
+        }
+    }
+    @Test fun `session expiry closes an active connection and notifies once`() {
+        val expired=CountDownLatch(1)
+        PhoneSearchServer("127.0.0.1",{ fail("expired query") },{ expired.countDown() },150).use { server ->
+            val uri=URI(server.url)
+            Socket("127.0.0.1",uri.port).use { socket ->
+                socket.soTimeout=1500
+                socket.getOutputStream().write("GET / HTTP/1.1\r\nX-Slow: ".toByteArray())
+                assertEquals(-1,socket.getInputStream().read())
+                assertTrue(expired.await(1,TimeUnit.SECONDS))
+            }
+        }
+    }
     private fun request(server: PhoneSearchServer,method: String="GET",path: String?=null,body: String="",headers: String="",host: String?=null): String {
         val uri=URI(server.url)
         return Socket("127.0.0.1",uri.port).use { socket ->

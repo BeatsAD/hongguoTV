@@ -10,13 +10,16 @@ class LatestWriteQueue<K, V>(
     name: String,
     private val delayMillis: Long = 250,
     private val write: (Map<K, V>) -> Boolean,
-    private val failed: () -> Unit = {}
+    private val failed: () -> Unit = {},
+    private val saved: () -> Unit = {}
 ) {
     private val worker = Executors.newSingleThreadScheduledExecutor { task -> Thread(task, name) }
     private val pending = linkedMapOf<K, V>()
     private var scheduled: ScheduledFuture<*>? = null
     private var closed = false
     private var retries = 0
+    private var writing = false
+    @Synchronized fun hasPendingWrites() = writing || pending.isNotEmpty()
 
     @Synchronized fun submit(values: Map<K, V>) {
         check(!closed) { "Persistence queue is closed" }
@@ -32,11 +35,12 @@ class LatestWriteQueue<K, V>(
     private fun drain() {
         val batch = synchronized(this) {
             scheduled = null
-            pending.toMap().also { pending.clear() }
+            pending.toMap().also { pending.clear(); writing=it.isNotEmpty() }
         }
         if (batch.isEmpty()) return
         val success = runCatching { write(batch) }.getOrDefault(false)
-        synchronized(this) {
+        val settled=synchronized(this) {
+            writing=false
             if (success) retries = 0
             else {
                 // A newer queued checkpoint must win over this failed, older snapshot.
@@ -45,7 +49,9 @@ class LatestWriteQueue<K, V>(
                 failed()
                 if (!closed && retries <= 2 && scheduled == null) schedule(1000)
             }
+            success && pending.isEmpty()
         }
+        if(settled) saved()
     }
     /** Nonblocking close: already queued writes finish; do not interrupt an in-flight commit. */
     @Synchronized fun close() {

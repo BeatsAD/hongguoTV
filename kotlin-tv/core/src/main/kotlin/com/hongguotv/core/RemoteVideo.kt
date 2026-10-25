@@ -23,12 +23,12 @@ class RemoteVideo(private val http: OkHttpClient, val info: StreamInfo): Closeab
         synchronized(calls) { if(closed) throw IOException("播放请求已取消"); calls+=call }
         try {
             return RequestScope.execute(call) { response ->
-                if(response.code!=206) throw IOException("视频服务器不支持分段读取（HTTP ${response.code}）")
-                val match=Regex("bytes (\\d+)-(\\d+)/(\\d+)").matchEntire(response.header("Content-Range").orEmpty()) ?: throw IOException("视频分段响应异常")
+                if(response.code!=206) throw PlaybackSourceException(if(PlaybackErrors.retryableHttp(response.code)) PlaybackFailureKind.NETWORK else if(response.code==200) PlaybackFailureKind.FORMAT else PlaybackFailureKind.SOURCE,"视频服务器不支持分段读取（HTTP ${response.code}）")
+                val match=Regex("bytes (\\d+)-(\\d+)/(\\d+)").matchEntire(response.header("Content-Range").orEmpty()) ?: throw PlaybackSourceException(PlaybackFailureKind.FORMAT,"视频分段响应异常")
                 val (begin,finish,size)=match.destructured
                 val full=size.toLong(); val last=minOf(end,full-1)
-                if(begin.toLong()!=start || finish.toLong()!=last || full<=0) throw IOException("视频分段范围不匹配")
-                if(total!=0L && full!=total) throw IOException("视频资源已变化，请重试")
+                if(begin.toLong()!=start || finish.toLong()!=last || full<=0) throw PlaybackSourceException(PlaybackFailureKind.FORMAT,"视频分段范围不匹配")
+                if(total!=0L && full!=total) throw PlaybackSourceException(PlaybackFailureKind.FORMAT,"视频资源已变化，请重试")
                 val n=(last-start+1).toInt(); val body=response.body ?: throw IOException("视频分段为空")
                 val bytes=body.source().readByteArray(n.toLong())
                 Range(bytes,full)
@@ -39,10 +39,10 @@ class RemoteVideo(private val http: OkHttpClient, val info: StreamInfo): Closeab
         if(::prepared.isInitialized) return this
         val first=range(0,256*1024-1); total=first.total
         prefix=first.bytes
-        val end=MediaCrypto.headerEnd(first.bytes,total)
+        val end=try { MediaCrypto.headerEnd(first.bytes,total) } catch(_: Exception) { throw PlaybackSourceException(PlaybackFailureKind.FORMAT,"视频索引格式不支持，请换一部剧或更新应用") }
         val header=if(end>first.bytes.size) first.bytes+range(first.bytes.size.toLong(),end-1L).bytes else first.bytes.copyOf(end)
-        prepared=MediaCrypto.prepare(header,info.key)
-        if(prepared.samples.any { it.end>total }) throw IOException("视频样本超出资源大小")
+        prepared=try { MediaCrypto.prepare(header,info.key) } catch(_: Exception) { throw PlaybackSourceException(PlaybackFailureKind.FORMAT,"视频索引格式不支持，请换一部剧或更新应用") }
+        if(prepared.samples.any { it.end>total }) throw PlaybackSourceException(PlaybackFailureKind.FORMAT,"视频样本超出资源大小，请换一部剧或更新应用")
         return this
     }
     /** Bounded warm-up. Retains raw bytes so decryption still uses the absolute sample offset. */
