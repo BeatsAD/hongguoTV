@@ -14,9 +14,9 @@ import java.util.concurrent.TimeUnit
 internal fun JSONArray.objects() = (0 until length()).mapNotNull { optJSONObject(it) }
 internal fun JSONObject.str(key: String) = if (isNull(key)) "" else optString(key, "").trim()
 internal fun cleanUrl(s: String) = s.replace("\\/","/").replace("\\u002F","/",ignoreCase=true).replace("\\u0026","&").replace("&amp;","&")
-data class Series(val id: String, val title: String, val cover: String = "", val description: String = "", val badge: String = "", val tags: String = "") {
-    fun toJson() = JSONObject().put("id",id).put("title",title).put("cover",cover).put("description",description).put("badge",badge).put("tags",tags)
-    companion object { fun fromJson(o: JSONObject) = Series(o.str("id"),o.str("title"),o.str("cover"),o.str("description"),o.str("badge"),o.str("tags")) }
+data class Series(val id: String, val title: String, val cover: String = "", val description: String = "", val badge: String = "", val tags: String = "", val contentType: ContentType? = null, val episodeCount: Int? = null, val tagNames: List<String> = emptyList(), val playable: Boolean = true) {
+    fun toJson() = JSONObject().put("id",id).put("title",title).put("cover",cover).put("description",description).put("badge",badge).put("tags",tags).put("type",contentType?.storedValue).put("episodeCount",episodeCount).put("tagNames",JSONArray(tagNames)).put("playable",playable)
+    companion object { fun fromJson(o: JSONObject) = Series(o.str("id"),o.str("title"),o.str("cover"),o.str("description"),o.str("badge"),o.str("tags"),ContentType.known(o.str("type")),o.optInt("episodeCount").takeIf { it>0 },o.optJSONArray("tagNames")?.let { a -> (0 until a.length()).map { a.optString(it) }.filter(String::isNotBlank) }.orEmpty(),o.optBoolean("playable",true)) }
 }
 data class Detail(val series: Series, val episodes: List<String>)
 data class RankPosition(val rank: Int?, val heat: String)
@@ -40,7 +40,7 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
     private data class SearchCursor(val searchId: String, val passback: String, val offset: Int?, val updatedAt: Long, val source: SearchSource = SearchSource.APP, val websitePage: Int = 0)
     private val searchCursors=linkedMapOf<Triple<ContentType,String,Int>,SearchCursor>()
     @Volatile private var appSearchRetryAt = 0L
-    private fun text(url: String, signed: Signer.Request? = null, timeoutMillis: Long? = null, metadata: Boolean = true): String {
+    internal fun text(url: String, signed: Signer.Request? = null, timeoutMillis: Long? = null, metadata: Boolean = true): String {
         val request = Request.Builder().url(url).header("User-Agent",VendorConstants.VIDEO_UA).header("Accept-Language","zh-CN,zh;q=0.9")
         signed?.headers?.forEach { (k,v) -> request.header(k,v) }
         signed?.body?.let { request.post(it.toRequestBody("application/json; charset=utf-8".toMediaType())) }
@@ -69,7 +69,7 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
         val o=item.optJSONObject("video_data") ?: item
         val count=o.optInt("episode_cnt",o.optJSONObject("series_episode_info")?.optInt("episode_cnt",0) ?: 0)
         val tags=o.optJSONArray("tags") ?: o.optJSONArray("category_list") ?: JSONArray()
-        return Series(o.str("series_id"),o.str("series_name").ifEmpty { o.str("series_title").ifEmpty { item.str("name") } },cleanUrl(o.str("series_cover")),o.str("series_intro"),o.str("episode_right_text").ifEmpty { if(count>0) "全 ${count} 集" else "" },(0 until minOf(tags.length(),5)).joinToString(" · ") { tags.optJSONObject(it)?.str("name") ?: tags.optString(it) })
+        return Series(o.str("series_id"),o.str("series_name").ifEmpty { o.str("series_title").ifEmpty { item.str("name") } },cleanUrl(o.str("series_cover")),o.str("series_intro"),o.str("episode_right_text").ifEmpty { if(count>0) "全 ${count} 集" else "" },(0 until minOf(tags.length(),5)).joinToString(" · ") { tags.optJSONObject(it)?.str("name") ?: tags.optString(it) },episodeCount=count.takeIf { it>0 },tagNames=(0 until tags.length()).map { tags.optJSONObject(it)?.str("name") ?: tags.optString(it) }.filter(String::isNotBlank).distinct())
     }
     private fun valid(rows: List<Series>) = rows.filter { it.id.matches(Regex("[0-9]{1,30}")) && it.title.isNotBlank() }.distinctBy { it.id }
     fun comicRanking(page: Int = 1): CatalogPage {
@@ -78,6 +78,7 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
     }
     fun home(page: Int = 1, type: ContentType = ContentType.SHORT): CatalogPage {
         require(page in 1..100)
+        if(type==ContentType.AI) throw IOException("请使用AI剧分类目录")
         if(type==ContentType.COMIC) return comicRanking(page)
         val data=router("$site/category?tab=1&sort_type=1"+if(page>1) "&page=$page" else "")
         val section=data.optJSONObject("category_page") ?: data.optJSONObject("category_$") ?: throw IOException("首页数据结构已变化")
@@ -88,6 +89,7 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
     }
     fun search(keyword: String, page: Int = 1, type: ContentType = ContentType.SHORT): CatalogPage {
         require(keyword.isNotBlank() && keyword.length<=80 && page in 1..100)
+        if(type.searchTab==null) throw IOException("AI剧搜索暂不可用；全部剧集搜索目前覆盖真人剧和漫剧")
         val cursor=synchronized(searchCursors) {
             val now=clock()
             searchCursors.entries.removeAll { now-it.value.updatedAt>300000 || (page==1 && it.key.first==type && it.key.second==keyword) }
@@ -166,7 +168,7 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
                 val id=video.str("series_id").ifEmpty { row.str("book_id").ifEmpty { row.str("search_result_id") } }
                 val title=row.optJSONObject("search_high_light")?.optJSONObject("title")?.str("text").orEmpty().ifEmpty { video.str("title").ifEmpty { row.str("cell_name") } }
                 val count=video.optInt("episode_cnt")
-                list+=Series(id,title,cleanUrl(video.str("cover").ifEmpty { video.str("cover_url") }),video.str("video_desc"),if(count>0) "全 $count 集" else video.str("rec_text"),video.str("sub_title"))
+                list+=Series(id,title,cleanUrl(video.str("cover").ifEmpty { video.str("cover_url") }),video.str("video_desc"),if(count>0) "全 $count 集" else video.str("rec_text"),video.str("sub_title"),contentType=type,episodeCount=count.takeIf { it>0 })
             }
         }
         rememberSearchPage(keyword,page,type,SearchCursor(tab.str("search_id"),tab.str("passback"),tab.str("next_offset").toIntOrNull(),clock()))
@@ -178,7 +180,7 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
         val raw=o.optJSONArray("vid_list") ?: throw IOException("分集暂不可用")
         val episodes=(0 until raw.length()).map { raw.getString(it) }
         if(episodes.isEmpty() || episodes.any { !it.matches(Regex("[0-9]{1,30}")) } || episodes.distinct().size!=episodes.size) throw IOException("分集数据异常")
-        return Detail(card(o).copy(id=id),episodes)
+        return Detail(card(o).copy(id=id,episodeCount=episodes.size),episodes)
     }
     fun stream(id: String, maxQuality: Int = 1080, supported: (StreamInfo)->Boolean = { true }): StreamInfo {
         require(id.matches(Regex("[0-9]{1,30}")))

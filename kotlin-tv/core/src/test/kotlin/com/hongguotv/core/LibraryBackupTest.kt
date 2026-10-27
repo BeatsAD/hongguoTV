@@ -9,6 +9,13 @@ class LibraryBackupTest {
     private fun series(id: String)=Series(id,"测试 $id","https://example.com/cover.jpg","", "已完结", "剧情")
     private fun progress(id: String,time: Long)=BackupProgress(series(id),"100$id",0,time,10000,false,time)
     private fun data()=BackupData(listOf(series("1")),listOf(progress("1",100)),setOf("1"),listOf(RecentSearch("你好",ContentType.COMIC)),BackupSettings())
+    @Test fun `v1 imports without guessing a genre and v2 retains AI metadata`() {
+        val legacy=JSONObject(LibraryBackup.encode(data())).put("version",1)
+        assertNull(LibraryBackup.decode(legacy.toString()).favorites.single().contentType)
+        val original=data().copy(favorites=listOf(series("1").copy(contentType=ContentType.AI,episodeCount=31,tagNames=listOf("科幻"))),settings=BackupSettings(type=ContentType.AI))
+        val encoded=LibraryBackup.encode(original)
+        assertEquals(2,JSONObject(encoded).getInt("version"));assertEquals(original,LibraryBackup.decode(encoded))
+    }
     @Test fun `backup round trips records and settings with cover and text sanitization`() {
         val original=data().copy(settings=BackupSettings(720,1.5f,false,ContentType.COMIC,VideoFrameMode.ZOOM))
         assertEquals(original,LibraryBackup.decode(LibraryBackup.encode(original)))
@@ -36,7 +43,7 @@ class LibraryBackupTest {
     }
     @Test fun `invalid format ranges settings duplicates and oversized nesting are rejected`() {
         fun reject(change: (JSONObject)->Unit) { val o=JSONObject(LibraryBackup.encode(data())); change(o); assertTrue(o.toString(),runCatching { LibraryBackup.decode(o.toString()) }.isFailure) }
-        reject { it.put("version",2) }; reject { it.put("format","other") }
+        reject { it.put("version",3) }; reject { it.put("format","other") }
         reject { it.getJSONObject("settings").put("speed",5) }; reject { it.getJSONObject("settings").put("quality",123) }
         reject { it.getJSONObject("settings").put("autoNext","true") }; reject { it.getJSONObject("settings").put("frame","OTHER") }
         reject { it.getJSONArray("history").getJSONObject(0).put("updatedAt",-1) }

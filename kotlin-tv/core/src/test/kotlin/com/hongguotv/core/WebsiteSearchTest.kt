@@ -24,7 +24,7 @@ class WebsiteSearchTest {
         .put("searchList",JSONArray(rows.toList())).put("pageNum",number).put("totalPages",if(more) number+1 else number).put("hasMore",more).toString()
 
     @Test fun emptyAppResponseUsesWebsiteWithExplicitGenreForEachType() {
-        for(type in ContentType.entries) {
+        for(type in ContentType.entries.filter { it.searchTab!=null }) {
             val paths=mutableListOf<String>()
             val repo=repository { request ->
                 paths+=request.url.encodedPath

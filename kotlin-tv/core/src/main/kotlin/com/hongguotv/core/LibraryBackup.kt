@@ -22,9 +22,9 @@ object LibraryBackup {
         value.takeIf { it.length<=2048 && uri.scheme=="https" && uri.userInfo==null && host.isNotEmpty() && !host.contains(':') && !host.matches(Regex("[0-9.]+")) && host!="localhost" && !host.endsWith(".local") && !host.endsWith(".lan") && value.none(Char::isISOControl) }.orEmpty()
     }.getOrDefault("")
     private fun cleanText(value: String,max: Int)=value.map { if(it.isISOControl()) ' ' else it }.joinToString("").take(max)
-    fun seriesJson(series: Series)=series.copy(title=cleanText(series.title,200),cover=cleanCover(series.cover),description="",badge=cleanText(series.badge,100),tags=cleanText(series.tags,200)).toJson()
+    fun seriesJson(series: Series)=series.copy(title=cleanText(series.title,200),cover=cleanCover(series.cover),description="",badge=cleanText(series.badge,100),tags=cleanText(series.tags,200),tagNames=series.tagNames.take(20).map { cleanText(it,100) }).toJson()
     fun encode(data: BackupData): String {
-        val result=JSONObject().put("format","hongguotv.library").put("version",1).put("createdAt",System.currentTimeMillis())
+        val result=JSONObject().put("format","hongguotv.library").put("version",2).put("createdAt",System.currentTimeMillis())
             .put("later",JSONArray(data.later.map(::seriesJson))).put("hidden",JSONArray(data.hidden.toList()))
             .put("favorites",JSONArray(data.favorites.map(::seriesJson))).put("history",JSONArray(data.history.map { it.json() }))
             .put("watched",JSONArray(data.watched.intersect((data.favorites.map { it.id }+data.history.map { it.series.id }).toSet()).take(500)))
@@ -44,7 +44,15 @@ object LibraryBackup {
         val array=getJSONArray(key); require(array.length()<=max) { "记录数量超过上限" }
         return (0 until array.length()).map { array.getJSONObject(it) }
     }
-    private fun series(o: JSONObject): Series = Series(id(o.string("id",30)),o.string("title",200).also { require(it.isNotBlank()) },cleanCover(o.string("cover",2048)),"",o.string("badge",100),o.string("tags",200))
+    private fun series(o: JSONObject): Series {
+        val base=Series(id(o.string("id",30)),o.string("title",200).also { require(it.isNotBlank()) },cleanCover(o.string("cover",2048)),"",o.string("badge",100),o.string("tags",200))
+        val type=if(o.has("type") && !o.isNull("type")) ContentType.known(o.string("type",20)) ?: error("内容类型无效") else null
+        val count=if(o.has("episodeCount") && !o.isNull("episodeCount")) o.number("episodeCount",100_000).toInt().takeIf { it>0 } else null
+        val tags=o.optJSONArray("tagNames")
+        require(tags==null || tags.length()<=20)
+        val names=tags?.let { a -> (0 until a.length()).map { a.getString(it).also { name -> require(name.length<=100 && name.none(Char::isISOControl)) } } }.orEmpty()
+        return base.copy(contentType=type,episodeCount=count,tagNames=names,playable=o.optBoolean("playable",true))
+    }
     fun decode(value: String): BackupData {
         require(value.toByteArray(Charsets.UTF_8).size<=MAX_BYTES) { "备份超过 2 MB 限制" }
         var depth=0; var quoted=false; var escaped=false
@@ -55,7 +63,7 @@ object LibraryBackup {
             else if(!quoted) { if(c=='{' || c=='[') { depth++; require(depth<=12) { "备份结构过深" } }; if(c=='}' || c==']') depth-- }
         }
         val o=JSONObject(value)
-        require(o.getString("format")=="hongguotv.library" && o.number("version",1)==1L) { "不支持的备份格式或版本" }
+        require(o.getString("format")=="hongguotv.library" && o.number("version",2) in 1L..2L) { "不支持的备份格式或版本" }
         val later=if(o.has("later")) o.rows("later",100).map(::series) else emptyList()
         require(later.distinctBy { it.id }.size==later.size) { "稍后看包含重复剧集" }
         val hidden=if(o.has("hidden")) o.getJSONArray("hidden") else JSONArray()
