@@ -9,6 +9,13 @@ class CategoryRepository(repository: ContentRepository) {
     private val dictionaries=mutableMapOf<ContentType,List<FilterDimension>>()
     fun load(query: CategoryQuery,cursor: CatalogCursor?=null,shown: List<String> = emptyList()): CategoryPage {
         require(cursor==null || cursor.fingerprint==query.fingerprint) { "分类游标与条件不符" }
+        val dictionary=synchronized(dictionaries) { dictionaries[query.type] }
+        if(cursor==null && dictionary==null) {
+            val initialQuery=CategoryQuery(query.type)
+            val initial=parse(api.request("/reading/distribution/category/landpage/v/",body=requestBody(initialQuery,null,emptyList(),true).toString()),initialQuery)
+            synchronized(dictionaries) { dictionaries[query.type]=initial.dimensions }
+            if(query.selections.isEmpty()) return initial
+        }
         val body=requestBody(query,cursor,shown)
         val page=parse(api.request("/reading/distribution/category/landpage/v/",body=body.toString()),query)
         synchronized(dictionaries) {
@@ -17,15 +24,15 @@ class CategoryRepository(repository: ContentRepository) {
         }
     }
     companion object {
-        fun requestBody(query: CategoryQuery,cursor: CatalogCursor?,shown: List<String>): JSONObject {
+        fun requestBody(query: CategoryQuery,cursor: CatalogCursor?,shown: List<String>,selector: Boolean=false): JSONObject {
             require(cursor==null || cursor.fingerprint==query.fingerprint)
             val selected=JSONObject()
             listOf("category_dim_epoch","online_time","gender","category_dim_role","sort","category_dim_theme").forEach { selected.put(it,JSONArray()) }
             query.selections.forEach { (key,items) -> require(key!="genre"); selected.put(key,JSONArray(items)) }
             selected.put("genre",JSONArray(listOf(query.type.genre)))
             return JSONObject().put("filter_ids",shown.joinToString(",")).put("req_scene",if(query.type==ContentType.SHORT) "default" else query.type.genre)
-                .put("offset",cursor?.offset ?: 0).put("limit",18).put("need_selector_panel",cursor==null).put("select_items",selected)
-                .put("session_id",cursor?.session.orEmpty()).put("req_type",if(cursor==null) "default" else "only_content").put("client_req_type",3)
+                .put("offset",cursor?.offset ?: 0).put("limit",18).put("need_selector_panel",selector).put("select_items",selected)
+                .put("session_id",cursor?.session.orEmpty()).put("req_type",if(selector) "default" else "only_content").put("client_req_type",3)
         }
         fun parse(raw: String,query: CategoryQuery): CategoryPage {
             val data=ListCards.data(raw)

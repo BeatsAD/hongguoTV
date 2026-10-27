@@ -50,7 +50,7 @@ class RankingRepository(repository: ContentRepository) {
                     val type=when(top.id) { "comic_series_rank"->ContentType.COMIC; "human"->ContentType.SHORT; "ai_playlet"->ContentType.AI; else->null }
                     val series=ListCards.series(v,type)
                     if(!ListCards.valid(series)) null else {
-                        val rank=runCatching { JSONObject(v.str("recommend_info")).str("rank").toIntOrNull() }.getOrNull()?.takeIf { it>0 }
+                        val rank=v.str("rank").ifBlank { row.str("rank") }.toIntOrNull()?.takeIf { it>0 }
                         RankEntry.Drama(series,rank,v.optJSONObject("rec_text_item")?.str("RecommendText").orEmpty(),top.id=="series_album")
                     }
                 }

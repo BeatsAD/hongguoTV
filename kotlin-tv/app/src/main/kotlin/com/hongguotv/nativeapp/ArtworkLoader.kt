@@ -77,8 +77,9 @@ class ArtworkLoader(context: Context) {
     /** Size defaults to the laid-out content bounds, including the detail page's portrait artwork. */
     fun load(view: ImageView, url: String, priority: Int = PRIORITY_VISIBLE, widthPx: Int = 0, heightPx: Int = 0) {
         if (closed) return
+        val requestUrl=com.hongguotv.core.ArtworkUrl.forApi(url,android.os.Build.VERSION.SDK_INT)
         val previous = bindings[view]
-        if (previous != null && previous.owner == owner && previous.url == url && previous.width == widthPx && previous.height == heightPx) {
+        if (previous != null && previous.owner == owner && previous.url == requestUrl && previous.width == widthPx && previous.height == heightPx) {
             previous.priority = priority.coerceIn(PRIORITY_FOCUSED, PRIORITY_PREFETCH)
             previous.failed = null
             request(previous)
@@ -86,8 +87,8 @@ class ArtworkLoader(context: Context) {
         }
         if (previous != null) unbind(previous)
         view.setImageDrawable(null)
-        if (url.isBlank()) return
-        val binding = Binding(view, owner, url, priority.coerceIn(PRIORITY_FOCUSED, PRIORITY_PREFETCH), widthPx, heightPx)
+        if (requestUrl.isBlank()) return
+        val binding = Binding(view, owner, requestUrl, priority.coerceIn(PRIORITY_FOCUSED, PRIORITY_PREFETCH), widthPx, heightPx)
         binding.layout = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> request(binding) }
         binding.attach = object : View.OnAttachStateChangeListener {
             override fun onViewAttachedToWindow(v: View) { request(binding) }
