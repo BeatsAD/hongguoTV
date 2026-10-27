@@ -30,7 +30,7 @@ class CatalogScreen(context: Context,private val state: CatalogUiState,sidebar: 
             theme.options.filterIndexed { index,item -> index<6 || item.id in chosen }.forEach { option -> options+=CapsuleButton(context,option.label,option.id in chosen) { change(state.query.choose(theme,option.id)) }.apply { tag="theme:${option.id}" } }
         }
         val more=CapsuleButton(context,if(state.expanded) "收起" else "更多",state.expanded) { state.expanded=!state.expanded;renderControls();controls.findViewWithTag<View>("more")?.requestFocus() }.apply { tag="more" }
-        options+=more; options+=CapsuleButton(context,"重置") { change(CategoryQuery(state.query.type)) }.apply { tag="reset" }
+        options+=more; options+=CapsuleButton(context,"重置") { change(CategoryQuery(state.query.type,mapOf("sort" to listOf("hot_score")))) }.apply { tag="reset" }
         ui.line(controls,options)
         grid.topTarget=more
         options.forEach { view -> view.setOnKeyListener { _,key,event -> if(key==android.view.KeyEvent.KEYCODE_DPAD_DOWN && event.action==android.view.KeyEvent.ACTION_DOWN && !state.expanded) { grid.focusFirst();true } else false } }
