@@ -70,7 +70,7 @@ class PhoneSearchServerTest {
             socket.getInputStream().readBytes().toString(Charsets.UTF_8)
         }
     }
-    @Test fun `phone form accepts one unicode search without reflecting it in HTML`() {
+    @Test fun `phone form accepts repeated unicode searches without reflecting them in HTML`() {
         val received=CountDownLatch(1); var query=""
         PhoneSearchServer("127.0.0.1",{ query=it;received.countDown() }).use { server ->
             val page=request(server)
@@ -79,7 +79,12 @@ class PhoneSearchServerTest {
             val reply=request(server,"POST",URI(server.url).path+"/submit","query="+URLEncoder.encode(value,"UTF-8"))
             assertTrue(reply.startsWith("HTTP/1.1 200")); assertFalse(reply.contains(value))
             assertTrue(received.await(2,TimeUnit.SECONDS)); assertEquals(value,query)
-            assertTrue(runCatching { request(server) }.isFailure)
+            assertTrue(request(server).startsWith("HTTP/1.1 200"))
+            assertEquals(1L,server.revision)
+            assertTrue(request(server,"POST",URI(server.url).path+"/submit","query=fast").startsWith("HTTP/1.1 429"))
+            Thread.sleep(450)
+            assertTrue(request(server,"POST",URI(server.url).path+"/submit","query=second").startsWith("HTTP/1.1 200"))
+            assertEquals(2L,server.revision);assertEquals("second",query)
         }
     }
     @Test fun `phone form preserves its origin and accepts a browser style post`() {
