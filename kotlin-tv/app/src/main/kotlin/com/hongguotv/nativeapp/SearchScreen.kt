@@ -4,6 +4,7 @@ package com.hongguotv.nativeapp
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.view.Gravity
 import android.view.View
 import android.widget.*
 import com.google.zxing.BarcodeFormat
@@ -12,59 +13,85 @@ import com.hongguotv.core.*
 
 /** QR form is the sole text input. Results never replace the page-owned QR session. */
 class SearchScreen(context: Context,private val state: SearchUiState,sidebar: View,load: (ImageView,String)->Unit,open: (Series)->Unit,
-    actions: (Series,View)->Unit,private val scope: (ContentType?)->Unit,private val query: (String)->Unit,history: List<RecentSearch>,private val clear: ()->Unit,refresh: ()->Unit,append: ()->Unit): LinearLayout(context) {
+    actions: (Series,View)->Unit,private val scope: (ContentType?)->Unit,private val query: (String)->Unit,history: List<RecentSearch>,private val clear: ()->Unit,reset: ()->Unit,refresh: ()->Unit,append: ()->Unit): LinearLayout(context) {
     private val ui=BrowseUi(context)
-    private val scopeControls=ui.column()
-    private val qr=ImageView(context)
-    private val connection=ui.text("正在生成二维码…",12f,TvStyle.muted)
-    private val remaining=ui.text("",11f,TvStyle.muted)
-    private val resultTitle=ui.text("最近搜索",17f)
+    private val qr=ImageView(context).apply { scaleType=ImageView.ScaleType.FIT_CENTER;setBackgroundColor(Color.WHITE);setPadding(ui.dp(4),ui.dp(4),ui.dp(4),ui.dp(4)) }
+    private val connection=ui.text("正在生成二维码…",11f,TvStyle.muted).apply { gravity=Gravity.CENTER;maxLines=2 }
+    private val remaining=ui.text("",10f,TvStyle.muted).apply { gravity=Gravity.CENTER }
+    private val resultTitle=ui.text("最近搜索",16f).apply { maxLines=2 }
     private val waiting=ui.column()
-    val grid=PosterGridView(context,if(resources.configuration.fontScale>1.2f) 2 else 3,sidebar,load,open,actions,{ if(state.error.isBlank()) append() })
-    private val status=CapsuleButton(context,"等待手机输入") { append() }
+    private val waitingScroll=TvScrollView(context).apply {
+        addView(waiting);isFocusable=true;isFocusableInTouchMode=true;contentDescription="搜索历史与输入说明"
+        setOnFocusChangeListener { _,focused -> foreground=TvStyle.shape(context,Color.TRANSPARENT,if(focused) TvStyle.text else Color.TRANSPARENT,6) }
+    }
+    private val scopeButton=BrowseButton(context,"",action={ showScopes() }).apply { tag="search:scope" }
+    private val clearResults=BrowseButton(context,"清除结果",BrowseButton.Role.TEXT) { reset();scopeButton.requestFocus() }
+    val grid=PosterGridView(context,TvStyle.searchColumns(context),sidebar,load,open,actions,{ if(state.error.isBlank()) append() })
+    private val status=BrowseStatus(context) { append() }
     init {
-        orientation=VERTICAL;addView(ui.title("找剧"))
-        addView(scopeControls);renderScopes()
-        val body=ui.row().apply { gravity=android.view.Gravity.TOP }
-        val left=ui.column().apply { setPadding(ui.dp(8),ui.dp(8),ui.dp(16),0) }
-        left.addView(ui.text("手机扫码输入",19f));left.addView(qr,LayoutParams(-1,ui.dp(160)).apply { topMargin=ui.dp(12);bottomMargin=ui.dp(12) })
-        left.addView(connection);left.addView(remaining);left.addView(CapsuleButton(context,"刷新二维码",action=refresh),LayoutParams(-1,-2).apply { topMargin=ui.dp(8) })
-        left.addView(ui.text("手机和电视需连接同一局域网\n遥控器选择范围与搜索结果",11f,TvStyle.muted).apply { setPadding(0,ui.dp(12),0,0) })
-        body.addView(left,LayoutParams(ui.dp(200),-1))
-        val right=ui.column();right.addView(resultTitle);right.addView(waiting)
-        showHistory(history)
-        right.addView(grid,LayoutParams(-1,0,1f));right.addView(status,LayoutParams(-1,-2));body.addView(right,LayoutParams(0,-1,1f));addView(body,LayoutParams(-1,0,1f))
-        update(true)
+        orientation=VERTICAL
+        val heading=ui.heading("找剧");heading.addView(clearResults,LayoutParams(-2,-2).apply { rightMargin=ui.dp(8) });heading.addView(scopeButton);addView(heading,LayoutParams(-1,-2).apply { bottomMargin=ui.dp(12) });renderScopes()
+        val body=ui.row().apply { gravity=Gravity.TOP }
+        val compact=BrowseLayout.compact(TvStyle.windowDp(context))
+        val left=ui.column().apply {
+            gravity=Gravity.CENTER_HORIZONTAL;setPadding(ui.dp(if(compact) 10 else 15),ui.dp(14),ui.dp(if(compact) 10 else 15),ui.dp(12))
+            background=TvStyle.shape(context,0xFF14171E.toInt(),0xFF303642.toInt(),8,.5f)
+        }
+        left.addView(ui.text("手机扫码输入",16f).apply { gravity=Gravity.CENTER })
+        left.addView(connection,LayoutParams(-1,-2).apply { topMargin=ui.dp(8) })
+        val qrSize=if(compact) 132 else 164
+        left.addView(qr,LayoutParams(ui.dp(qrSize),ui.dp(qrSize)).apply { topMargin=ui.dp(12);bottomMargin=ui.dp(12) })
+        listOf("①  手机扫码打开输入页","②  输入剧名，发送到电视","③  用遥控器选择剧集").forEach { step ->
+            left.addView(ui.text(step,12f,0xFFC3CDDD.toInt()),LayoutParams(-1,-2).apply { bottomMargin=ui.dp(7) })
+        }
+        left.addView(ui.text("手机和电视需连接同一局域网",10f,TvStyle.muted).apply { gravity=Gravity.CENTER },LayoutParams(-1,-2).apply { topMargin=ui.dp(4) })
+        left.addView(remaining,LayoutParams(-1,-2).apply { topMargin=ui.dp(5) })
+        left.addView(BrowseButton(context,"刷新二维码",action=refresh),LayoutParams(-2,-2).apply { topMargin=ui.dp(9) })
+        body.addView(TvScrollView(context).apply { addView(left) },LayoutParams(ui.dp(BrowseLayout.qrPanel(TvStyle.windowDp(context)).toInt()),-1))
+        val right=ui.column();right.addView(resultTitle,LayoutParams(-1,-2).apply { bottomMargin=ui.dp(10) })
+        right.addView(waitingScroll,LayoutParams(-1,0,1f));right.addView(grid,LayoutParams(-1,0,1f));right.addView(status,LayoutParams(-1,-2))
+        body.addView(right,LayoutParams(0,-1,1f).apply { leftMargin=ui.dp(if(compact) 14 else 20) })
+        addView(body,LayoutParams(-1,0,1f));grid.bottomTarget=status.actionView;showHistory(history);update(true)
     }
-    fun renderScopes() {
-        val focus=scopeControls.findFocus()?.tag;scopeControls.removeAllViews()
-        ui.line(scopeControls,listOf(null,ContentType.SHORT,ContentType.COMIC,ContentType.AI).map { type -> CapsuleButton(context,type?.label ?: "全部剧集",state.scope==type) { scope(type) }.apply { tag="scope:${type?.storedValue ?: "all"}" } })
-        grid.topTarget=scopeControls.findViewWithTag<View>("scope:${state.scope?.storedValue ?: "all"}")
-        if(focus!=null) scopeControls.findViewWithTag<View>(focus)?.requestFocus()
+    private fun showScopes() {
+        val options=listOf(null,ContentType.SHORT,ContentType.COMIC,ContentType.AI)
+        PopupMenu(context,scopeButton).apply {
+            options.forEachIndexed { index,type -> menu.add(0,index,index,type?.label ?: "全部剧集").apply { isCheckable=true;isChecked=type==state.scope } }
+            setOnMenuItemClickListener { scope(options[it.itemId]);true };show()
+        }
     }
+    fun renderScopes() { scopeButton.text="范围：${state.scope?.label ?: "全部剧集"} ▾";grid.topTarget=scopeButton }
     fun showHistory(history: List<RecentSearch>) {
         waiting.removeAllViews()
-        if(history.isEmpty()) waiting.addView(ui.text("在手机输入中文剧名，发送后结果会出现在这里。",14f,TvStyle.muted))
+        if(history.isEmpty()) waiting.addView(ui.text("暂无搜索记录",12f,TvStyle.muted))
         else {
-            history.take(8).forEach { item -> waiting.addView(CapsuleButton(context,item.query) { query(item.query) },LayoutParams(-1,-2).apply { bottomMargin=ui.dp(4) }) }
-            waiting.addView(CapsuleButton(context,"清空搜索历史",action=clear))
+            val flow=BrowseFlow(context)
+            history.take(8).forEach { item -> flow.addView(BrowseButton(context,item.query) { query(item.query) }.apply { maxWidth=ui.dp(160) }) }
+            waiting.addView(flow,LayoutParams(-1,-2))
+            waiting.addView(BrowseButton(context,"清空搜索历史",BrowseButton.Role.TEXT,action=clear).apply { textSize=11f },LayoutParams(-2,-2).apply { topMargin=ui.dp(7) })
         }
+        waiting.addView(View(context).apply { setBackgroundColor(TvStyle.outline) },LayoutParams(-1,ui.dp(1)).apply { topMargin=ui.dp(20);bottomMargin=ui.dp(20) })
+        waiting.addView(ui.text("等待手机输入剧名",18f).apply { maxLines=2 })
+        waiting.addView(ui.text("手机发送后，搜索结果会自动出现在这里。\n可以连续发送新的关键词，无需重新扫码。",13f,TvStyle.muted).apply { setLineSpacing(ui.dp(4).toFloat(),1f) },LayoutParams(-1,-2).apply { topMargin=ui.dp(10) })
     }
     fun session(url: String?) {
         if(url==null) { qr.setImageDrawable(null);remaining.text="";return }
         val bits=QRCodeWriter().encode(url,BarcodeFormat.QR_CODE,400,400)
         qr.setImageBitmap(Bitmap.createBitmap(IntArray(160000) { i -> if(bits[i%400,i/400]) Color.BLACK else Color.WHITE },400,400,Bitmap.Config.ARGB_8888))
+        (qr.drawable as? android.graphics.drawable.BitmapDrawable)?.isFilterBitmap=false
         connection.text="手机扫码后用浏览器打开";qr.contentDescription="手机输入二维码"
     }
     fun connection(value: String) { connection.text=value }
     fun countdown(seconds: Long) { remaining.text="有效期 %02d:%02d".format(seconds/60,seconds%60) }
     fun update(initial: Boolean=false) {
         val searched=state.query.isNotEmpty()
-        waiting.visibility=if(searched) GONE else VISIBLE;grid.visibility=if(searched) VISIBLE else GONE
+        clearResults.visibility=if(searched) VISIBLE else GONE
+        waitingScroll.visibility=if(searched) GONE else VISIBLE;grid.visibility=if(searched) VISIBLE else GONE
         resultTitle.text=if(searched) "“${state.query}” · ${state.scope?.label ?: "综合结果"}" else "最近搜索"
         grid.submit(state.items.map { PosterGridView.Item(it) },if(initial) state.anchor else null)
-        status.text=when { state.busy->"正在搜索…";state.scope==ContentType.AI->"AI剧搜索暂不可用";state.error.isNotBlank()->state.error+" · 重试";!searched->"等待手机输入";state.items.isEmpty()->"没有匹配的剧集";state.more.values.any { it }->"继续加载 ↓";else->"已显示全部结果" }
-        if(searched && state.scope==null && state.error.isBlank() && !state.busy) status.text="真人剧与漫剧综合结果 · AI搜索暂不可用"+if(state.more.values.any { it }) " · 继续加载" else ""
+        val message=when { state.busy->"正在搜索…";state.scope==ContentType.AI->"AI剧搜索暂不可用";state.error.isNotBlank()->state.error;!searched->"";state.items.isEmpty()->"没有匹配的剧集";state.more.values.any { it }->"已加载${state.items.size}部";else->"已显示全部结果" }
+        val note=if(searched && state.scope==null && state.error.isBlank() && !state.busy) "真人剧与漫剧综合结果 · AI搜索暂不可用" else message
+        status.show(note,when { state.busy || !searched || state.scope==ContentType.AI->null;state.error.isNotBlank()->"重试";state.more.values.any { it }->"继续加载";else->null })
     }
     fun capture() { state.anchor=grid.capture() }
 }

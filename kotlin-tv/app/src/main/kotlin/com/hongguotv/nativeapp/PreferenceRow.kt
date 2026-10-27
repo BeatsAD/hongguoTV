@@ -18,7 +18,7 @@ class PreferenceRow(context: Context,label: String,kind: TvGlyph.Kind): TextView
     private val ink=TextPaint(Paint.ANTI_ALIAS_FLAG)
     private val badge=Paint(Paint.ANTI_ALIAS_FLAG).apply { color=Color.rgb(52,53,59) }
     private fun dp(n: Int)=n*resources.displayMetrics.density
-    init { text=label; textSize=14f; includeFontPadding=false; minHeight=dp(65).toInt() }
+    init { text=label; textSize=14f; includeFontPadding=false; minHeight=dp(54).toInt() }
     override fun onDraw(canvas: Canvas) {
         val center=height/2f
         canvas.drawRoundRect(dp(15),center-dp(14),dp(43),center+dp(14),dp(8),dp(8),badge)
@@ -43,7 +43,7 @@ class PreferenceSwitch(context: Context): Switch(context) {
     private val badge=Paint(Paint.ANTI_ALIAS_FLAG).apply { color=Color.rgb(52,53,59) }
     private val glyph=TvGlyph(TvGlyph.Kind.PLAY,TvStyle.text)
     private fun dp(n: Int)=n*resources.displayMetrics.density
-    init { textSize=14f; setTextColor(TvStyle.text); minHeight=dp(65).toInt(); setPadding(dp(56).toInt(),dp(12).toInt(),dp(15).toInt(),dp(12).toInt()) }
+    init { textSize=14f; setTextColor(TvStyle.text); minHeight=dp(54).toInt(); setPadding(dp(56).toInt(),dp(12).toInt(),dp(15).toInt(),dp(12).toInt()) }
     override fun onDraw(canvas: Canvas) {
         val center=height/2f
         canvas.drawRoundRect(dp(15),center-dp(14),dp(43),center+dp(14),dp(8),dp(8),badge)

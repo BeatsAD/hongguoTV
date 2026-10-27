@@ -24,7 +24,7 @@ class PosterCardView(context: Context): LinearLayout(context) {
     private fun label(size: Float,color: Int=TvStyle.text)=TextView(context).apply { textSize=size;setTextColor(color);includeFontPadding=false }
     init {
         orientation=VERTICAL; id=View.generateViewId(); isFocusable=true; isFocusableInTouchMode=true; clipChildren=false
-        setPadding(dp(3),dp(3),dp(3),dp(3))
+        setPadding(0,0,0,0)
         poster.addView(image,FrameLayout.LayoutParams(-1,-1)); poster.addView(chips,FrameLayout.LayoutParams(-1,-2,Gravity.TOP).apply { setMargins(dp(4),dp(5),dp(4),0) })
         poster.addView(count,FrameLayout.LayoutParams(-2,-2,Gravity.BOTTOM or Gravity.END).apply { setMargins(0,0,dp(5),dp(6)) })
         poster.addView(progress,FrameLayout.LayoutParams(-1,dp(3),Gravity.BOTTOM))

@@ -103,27 +103,11 @@ class NativeBrowseController(private val activity: Activity,private val reposito
         val target=root ?: return
         home=null;catalogView=null;rankView=null;searchView=null;localGrid=null
         target.removeAllViews()
-        val shell=ui.row().apply { gravity=android.view.Gravity.TOP;setBackgroundColor(TvStyle.background) }
+        val shell=BrowseScaffold(activity,route,type) { key,genre -> select(key,genre) }
         target.addView(shell,FrameLayout.LayoutParams(-1,-1))
-        val side=ui.column().apply { setBackgroundColor(0xFF101114.toInt());setPadding(ui.dp(10),ui.dp(20),ui.dp(10),ui.dp(12)) }
-        val width=(activity.resources.displayMetrics.widthPixels*.16f).toInt()
-        shell.addView(side,LinearLayout.LayoutParams(width,-1))
-        val brand=ui.row();brand.addView(ImageView(activity).apply { setImageResource(R.drawable.app_icon) },LinearLayout.LayoutParams(ui.dp(26),ui.dp(26)))
-        brand.addView(ui.text(" 红果 TV",18f).apply { maxLines=1;setAutoSizeTextTypeUniformWithConfiguration(10,18,1,android.util.TypedValue.COMPLEX_UNIT_SP) },LinearLayout.LayoutParams(0,ui.dp(30),1f));side.addView(brand,LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=ui.dp(22) })
-        val nav=mutableListOf<View>();var selected: View?=null
-        fun item(label: String,key: String,genre: ContentType?=null) {
-            val chosen=route==key && (key!="catalog" || genre==type)
-            val kind=when(key) { "home"->TvGlyph.Kind.HOME;"search"->TvGlyph.Kind.SEARCH;"ranks"->TvGlyph.Kind.RANK;"library"->TvGlyph.Kind.BOOKMARK;"settings"->TvGlyph.Kind.SETTINGS;else->when(genre) { ContentType.COMIC->TvGlyph.Kind.LAYERS;ContentType.AI->TvGlyph.Kind.AI;else->TvGlyph.Kind.FRAME } }
-            val button=SidebarButton(activity,label,kind,chosen) { select(key,genre ?: type) }.apply { tag="browse:$key:${genre?.storedValue.orEmpty()}" }
-            side.addView(button,LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=ui.dp(4) });nav+=button;if(chosen) selected=button
-        }
-        item("首页","home");item("搜索","search");item("榜单","ranks");item("我的片单","library")
-        side.addView(ui.text("分类",11f,TvStyle.muted).apply { setPadding(ui.dp(12),ui.dp(10),0,ui.dp(5)) })
-        item("真人剧","catalog",ContentType.SHORT);item("漫剧","catalog",ContentType.COMIC);item("AI剧","catalog",ContentType.AI)
-        side.addView(Space(activity),LinearLayout.LayoutParams(1,0,1f));item("设置","settings")
-        sidebar=selected ?: nav.first()
-        val body=ui.column().apply { setPadding(ui.dp(18),ui.dp(15),ui.dp(16),ui.dp(12)) };content=body;shell.addView(body,LinearLayout.LayoutParams(0,-1,1f))
-        nav.forEachIndexed { index,view -> view.nextFocusUpId=nav.getOrNull(index-1)?.id ?: view.id;view.nextFocusDownId=nav.getOrNull(index+1)?.id ?: view.id;view.nextFocusLeftId=view.id;view.setOnKeyListener { _,key,event -> if(key==android.view.KeyEvent.KEYCODE_DPAD_RIGHT && event.action==android.view.KeyEvent.ACTION_DOWN) { focusContent();true } else false } }
+        sidebar=shell.selectedNav
+        val body=shell.body;content=body
+        shell.enterContent={ focusContent() }
         routeChanged(tab())
         saveStatus=CapsuleButton(activity,"本机改动尚未保存 · 重试保存") { library.flush() }.also { it.visibility=if(library.saveFailed) View.VISIBLE else View.GONE;body.addView(it) }
         when(route) {
@@ -142,6 +126,10 @@ class NativeBrowseController(private val activity: Activity,private val reposito
             "home" -> homePosition?.let { home?.restorePosition(it,it.focus.isNotBlank()) }
         } }
     }
+    internal fun detailScaffold(target: FrameLayout,navigate: (String,ContentType)->Unit): BrowseScaffold {
+        target.removeAllViews()
+        return BrowseScaffold(activity,route,type,navigate).also { target.addView(it,FrameLayout.LayoutParams(-1,-1)) }
+    }
     private fun focusContent() {
         when(route) {
             "home" -> home?.findViewById<View>(home!!.firstId())?.requestFocus()
@@ -154,8 +142,8 @@ class NativeBrowseController(private val activity: Activity,private val reposito
     }
     private fun firstControl() { val views=java.util.ArrayList<View>();content?.addFocusables(views,View.FOCUS_DOWN);views.firstOrNull()?.requestFocus() }
     private fun renderHome(body: LinearLayout) {
-        val heading=ui.row();heading.addView(ui.title("首页"),LinearLayout.LayoutParams(0,-2,1f))
-        heading.addView(CapsuleButton(activity,"搜索剧名") { search.scope=null;select("search") });body.addView(heading)
+        val heading=ui.heading("首页",22f)
+        heading.addView(BrowseButton(activity,"搜索剧名",BrowseButton.Role.SEARCH) { search.scope=null;select("search") },LinearLayout.LayoutParams(ui.dp(if(BrowseLayout.compact(TvStyle.windowDp(activity))) 130 else 160),-2));body.addView(heading,LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=ui.dp(10) })
         home=HomeScreen(activity,sidebar!!,load,{ _,_-> },{ series,resume -> openChecked(series,resume) },actions,{}).also { view ->
             body.addView(view,LinearLayout.LayoutParams(-1,0,1f));view.nearEnd={ key -> ContentType.known(key)?.let { loadHome(it) } }
         }
@@ -230,7 +218,10 @@ class NativeBrowseController(private val activity: Activity,private val reposito
         phoneScope=search.scope
         searchView=SearchScreen(activity,search,sidebar!!,load,{ openChecked(it,false) },actions,{ scope ->
             search.scope=scope;phoneScope=scope;scopeRevision++;searchView?.renderScopes();if(search.query.isNotBlank()) beginSearch(search.query) else { search.error="";searchView?.update() }
-        },::beginSearch,library.searches(),{ library.clearSearches();searchView?.showHistory(emptyList()) },::startPhone,{ loadSearch(true) }).also { body.addView(it,LinearLayout.LayoutParams(-1,0,1f)) }
+        },::beginSearch,library.searches(),{ library.clearSearches();searchView?.showHistory(emptyList()) },{
+            stopJobs();search.query="";search.items=emptyList();search.pages.clear();search.more.clear();search.error="";search.anchor=PosterGridView.Anchor()
+            searchView?.showHistory(library.searches());searchView?.update()
+        },::startPhone,{ loadSearch(true) }).also { body.addView(it,LinearLayout.LayoutParams(-1,0,1f)) }
         startPhone();main.removeCallbacks(countdown);main.post(countdown)
         if(search.query.isNotBlank() && search.items.isEmpty() && search.error.isBlank()) loadSearch()
     }
@@ -282,13 +273,16 @@ class NativeBrowseController(private val activity: Activity,private val reposito
         }
     }
     private fun renderLibrary(body: LinearLayout) {
-        val heading=ui.row();heading.addView(ui.title("我的片单"),LinearLayout.LayoutParams(0,-2,1f))
-        if(section==LibrarySection.FAVORITES) heading.addView(CapsuleButton(activity,"检查收藏更新") { checkFavorites() })
-        if(section==LibrarySection.HISTORY) heading.addView(CapsuleButton(activity,"清空观看记录") { sidebar?.let(clearHistory) })
-        body.addView(heading);ui.line(body,LibrarySection.entries.map { item -> CapsuleButton(activity,item.label,section==item) { capture();section=item;select("library") } })
+        val heading=ui.heading("我的片单")
+        if(section==LibrarySection.FAVORITES) heading.addView(BrowseButton(activity,"检查收藏更新",BrowseButton.Role.TEXT) { checkFavorites() })
+        if(section==LibrarySection.HISTORY) heading.addView(BrowseButton(activity,"清空观看记录",BrowseButton.Role.TEXT) { sidebar?.let(clearHistory) })
+        body.addView(heading)
+        val counts=mapOf(LibrarySection.FAVORITES to library.favorites().size,LibrarySection.LATER to library.later().size,LibrarySection.HISTORY to library.history().size)
+        val tabs=LibrarySection.entries.map { item -> BrowseButton(activity,"${item.label}  ${counts.getValue(item)}",BrowseButton.Role.TAB,section==item) { capture();section=item;select("library") } }
+        ui.line(body,tabs)
         val items=when(section) { LibrarySection.FAVORITES->library.favorites();LibrarySection.LATER->library.later();LibrarySection.HISTORY->library.history().map { it.series } }
         localGrid=PosterGridView(activity,TvStyle.catalogColumns(activity),sidebar!!,load,{ openChecked(it,section==LibrarySection.HISTORY) },actions,{}).also { view ->
-            body.addView(view,LinearLayout.LayoutParams(-1,0,1f));view.submit(items.map { item ->
+            view.topTarget=tabs[LibrarySection.entries.indexOf(section)];body.addView(view,LinearLayout.LayoutParams(-1,0,1f));view.submit(items.map { item ->
                 val progress=library.progress(item.id);PosterGridView.Item(item,if(section==LibrarySection.HISTORY && progress!=null) "第${progress.episodeIndex+1}集 · 已看${time(progress.position)}" else if(section==LibrarySection.FAVORITES) (if(library.watched(item.id)) "已看 · " else "")+library.favoriteLabel(item.id) else "",progress?.takeIf { section==LibrarySection.HISTORY && it.duration>0 }?.let { it.position.toFloat()/it.duration })
             },localAnchors[section])
         }

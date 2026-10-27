@@ -13,10 +13,10 @@ class SidebarButton(context: Context,value: String,kind: TvGlyph.Kind,selected: 
     init {
         val density=resources.displayMetrics.density
         fun dp(n: Int)=(n*density).toInt()
-        id=View.generateViewId();text=value;textSize=15f;isFocusable=true;isFocusableInTouchMode=true;isSelected=selected;gravity=Gravity.CENTER_VERTICAL
-        minHeight=dp(38);maxLines=1;ellipsize=android.text.TextUtils.TruncateAt.END
-        setPadding(dp(14),dp(8),dp(10),dp(8));setTextColor(TvStyle.text);compoundDrawablePadding=dp(11)
-        setCompoundDrawables(TvGlyph(kind).apply { setBounds(0,0,dp(18),dp(18)) },null,null,null)
+        id=View.generateViewId();text=value;textSize=14f;includeFontPadding=false;isFocusable=true;isFocusableInTouchMode=true;isSelected=selected;gravity=Gravity.CENTER_VERTICAL
+        minHeight=dp(33);maxLines=1
+        setPadding(dp(8),dp(8),dp(4),dp(8));setTextColor(if(selected) TvStyle.text else 0xFFC2C3CC.toInt());compoundDrawablePadding=dp(11)
+        setCompoundDrawables(TvGlyph(kind,filled=selected && kind==TvGlyph.Kind.HOME).apply { setBounds(0,0,dp(17),dp(17)) },null,null,null)
         fun paint() {
             val base=TvStyle.shape(context,if(selected) TvStyle.surface else Color.TRANSPARENT,if(hasFocus()) TvStyle.text else Color.TRANSPARENT,radius=6)
             background=if(selected) LayerDrawable(arrayOf(base,TvStyle.shape(context,TvStyle.accent,radius=2))).apply {

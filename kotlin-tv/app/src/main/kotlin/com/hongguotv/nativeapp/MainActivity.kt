@@ -121,7 +121,6 @@ class MainActivity: Activity() {
     private var detail: Detail?=null
     private var episodeIndex=0
     private var group=0
-    private var synopsisExpanded=false
     private var player: ExoPlayer?=null
     private var video: RemoteVideo?=null
     private var playbackReady=false
@@ -285,7 +284,7 @@ class MainActivity: Activity() {
         }
     }
     private fun pageTitle(parent: LinearLayout,title: String) {
-        parent.addView(text(title,36f).apply { typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL); setPadding(0,dp(32),0,dp(25)) })
+        parent.addView(BrowseUi(this).title(title),lp(-1,-2).apply { bottomMargin=dp(12) })
     }
 
     private fun pageScroll()=TvScrollView(this)
@@ -322,23 +321,23 @@ class MainActivity: Activity() {
 
     private fun settings(parent: LinearLayout) {
         pageTitle(parent,"设置")
-        val identity=row().apply { setPadding(0,0,0,dp(24)) }
+        val identity=row().apply { setPadding(0,0,0,dp(16)) }
         identity.addView(ImageView(this).apply { setImageResource(R.drawable.app_icon) },lp(dp(44),dp(44)).apply { rightMargin=dp(14) })
         val identityCopy=column(); identityCopy.addView(text("红果 TV",20f)); identityCopy.addView(text("你的故事，按你的习惯播放。",12f,muted).apply { setPadding(0,dp(6),0,0) })
         identity.addView(identityCopy,lp(0,-2).apply { weight=1f })
         identity.addView(text(BuildConfig.VERSION_NAME,12f,muted)); parent.addView(identity)
-        parent.addView(View(this).apply { setBackgroundColor(TvStyle.outline) },lp(-1,dp(1)).apply { bottomMargin=dp(30) })
+        parent.addView(View(this).apply { setBackgroundColor(TvStyle.outline) },lp(-1,dp(1)).apply { bottomMargin=dp(18) })
         val stacked=widthDp()<800 || resources.configuration.fontScale>1.25f
         val groups=LinearLayout(this).apply { orientation=if(stacked) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL; gravity=Gravity.TOP }
         val playback=column(); val device=column()
         listOf(playback,device).forEachIndexed { i,group ->
-            groups.addView(group,lp(if(stacked) -1 else 0,-2).apply { if(!stacked) { weight=1f; if(i==0) rightMargin=dp(32) } else bottomMargin=dp(20) })
+            groups.addView(group,lp(if(stacked) -1 else 0,-2).apply { if(!stacked) { weight=1f; if(i==0) rightMargin=dp(22) } else bottomMargin=dp(20) })
         }
         parent.addView(groups)
         val panels=mutableMapOf<LinearLayout,LinearLayout>()
         fun heading(group: LinearLayout,title: String) {
             group.addView(text(title,14f,muted).apply { setPadding(dp(14),0,0,dp(12)) })
-            val panel=column().apply { background=TvStyle.shape(this@MainActivity,surface,radius=15) }; group.addView(panel); panels[group]=panel
+            val panel=column().apply { background=TvStyle.shape(this@MainActivity,surface,radius=8) }; group.addView(panel); panels[group]=panel
         }
         fun separator(panel: LinearLayout) { if(panel.childCount>0) panel.addView(View(this).apply { setBackgroundColor(TvStyle.outline) },lp(-1,dp(1)).apply { leftMargin=dp(56) }) }
         fun setting(group: LinearLayout,label: String,action: ()->Unit): TextView {
@@ -419,7 +418,7 @@ class MainActivity: Activity() {
     private fun openDetail(series: Series,resume: Boolean=false,autoplay: Boolean=true,fromStart: Boolean=false) {
         playbackAttempt.clear(); favoriteMonitor.stop(); cancelDetailRefresh(); pendingDetailUpdate=null
         pendingDetail=series; detailAutoplay=autoplay; detailFromStart=fromStart
-        browser.leave();invalidatePage(); releaseCatalogViews(); screen=Screen.DETAIL; directPlayback=resume; detail=null; synopsisExpanded=false
+        browser.leave();invalidatePage(); releaseCatalogViews(); screen=Screen.DETAIL; directPlayback=resume; detail=null
         val body=base(series.title); message(body,"正在加载剧集…")
         work({ repository.detail(series.id) }, { result ->
             detail=result.copy(series=result.series.copy(contentType=series.contentType ?: result.series.contentType,
@@ -482,74 +481,82 @@ class MainActivity: Activity() {
         val focusedTag=if(preservePosition) root.findFocus()?.tag else null
         val savedY=if(preservePosition) detailScroll?.scrollY else null
         invalidatePage(); releaseCatalogViews(); screen=Screen.DETAIL; val data=detail ?: return showCatalog()
-        val body=base(); nav.clear(); val detailNav=button("‹ 返回列表") { showCatalog() }; body.addView(detailNav);repeat(7) { nav.add(detailNav) }
-        val scroll=pageScroll(); detailScroll=scroll; val content=column(); scroll.addView(content)
+        val shell=browser.detailScaffold(root) { key,genre ->
+            invalidatePage();releaseCatalogViews();screen=Screen.CATALOG;browser.select(key,genre)
+        }
+        val body=shell.body;nav.clear();nav.addAll(shell.navigation)
+        saveStatusView=BrowseButton(this,"本机改动尚未保存 · 重试保存",BrowseButton.Role.TEXT) { library.flush() }.also {
+            it.visibility=if(library.saveFailed) View.VISIBLE else View.GONE;body.addView(it)
+        }
+        val scroll=pageScroll();detailScroll=scroll;val content=column();scroll.addView(content)
         body.addView(scroll,lp(-1,0).apply { weight=1f })
+        val back=BrowseButton(this,"‹ 返回",BrowseButton.Role.TEXT) { goBack() }.apply { tag="detail:back" }
+        val backRow=row();backRow.addView(back);backRow.addView(text("剧集详情",12f,muted),lp(-2,-2).apply { leftMargin=dp(16) })
+        content.addView(backRow,lp(-1,-2).apply { bottomMargin=dp(12) })
         val progress=library.progress(data.series.id)
         val resumeTarget=ResumePlayback.target(data.episodes,progress?.episodeId,progress?.position ?: 0,progress?.completed==true)
         val watched=library.watched(data.series.id)
-        val hero=CinemaHero(this,::loadCover) { _,_ -> }; hero.contextLabel("剧集详情")
-        hero.show(data.series.copy(badge="全 ${data.episodes.size} 集"),"",if(watched) "重新观看" else if(progress!=null && !progress.completed) "继续第 ${resumeTarget.index+1} 集" else "开始观看")
-        val play=hero.play.apply { tag="detail:play" }
-        play.setOnClickListener { playEpisode(if(watched) 0 else resumeTarget.index,if(watched) 0 else resumeTarget.position) }
-        val favorite=hero.details.apply {
-            tag="detail:favorite"
-            text=if(library.favorite(data.series.id)) "已收藏" else "收藏"
-            (compoundDrawables[0] as? TvGlyph)?.kind(if(library.favorite(data.series.id)) TvGlyph.Kind.CHECK else TvGlyph.Kind.PLUS)
-            setOnClickListener {
-                favoriteMonitor.stop(); val saved=library.toggle(data.series)
+        lateinit var header: DetailHeader
+        header=DetailHeader(this,data.series,data.episodes.size,
+            if(watched) "▷ 重新观看" else if(progress!=null && !progress.completed) "▷ 继续第${resumeTarget.index+1}集" else "▷ 开始观看",::loadCover,
+            { tvTools.info(data.series.title,data.series.description.ifBlank { "暂无简介" },header.synopsisButton) },
+            { playEpisode(if(watched) 0 else resumeTarget.index,if(watched) 0 else resumeTarget.position) },
+            {
+                favoriteMonitor.stop();val saved=library.toggle(data.series)
                 if(saved) library.observeDetail(data,System.currentTimeMillis(),acknowledge=true)
-                text=if(saved) "已收藏" else "收藏"
-                (compoundDrawables[0] as? TvGlyph)?.kind(if(saved) TvGlyph.Kind.CHECK else TvGlyph.Kind.PLUS)
-            }
+                header.favoriteButton.text=if(saved) "✓ 已收藏" else "＋ 收藏"
+            },
+            { library.toggleLater(data.series);header.later.text=if(library.queued(data.series.id)) "✓ 已在稍后看" else "＋ 稍后看" },
+            library.favorite(data.series.id),library.queued(data.series.id))
+        content.addView(header,lp(-1,-2).apply { bottomMargin=dp(16) })
+        val divider=View(this).apply { setBackgroundColor(TvStyle.outline) };content.addView(divider,lp(-1,dp(1)))
+        val groupRow=row().apply { setPadding(0,dp(8),0,dp(6)) }
+        detailRefreshStatus=BrowseButton(this,"选集 · 全${data.episodes.size}集",BrowseButton.Role.TEXT) { refreshDetail(force=true) }.apply {
+            tag="detail:refresh";textSize=12f;contentDescription="共${data.episodes.size}集，刷新分集";groupRow.addView(this)
         }
-        val synopsis=text(data.series.description.ifBlank { "选择剧集开始观看" },14f,muted).apply { maxLines=20; visibility=if(synopsisExpanded) View.VISIBLE else View.GONE; setPadding(0,dp(14),0,dp(18)) }
-        lateinit var synopsisButton: TextView
-        synopsisButton=button(if(synopsisExpanded) "收起简介" else "完整简介") {
-            synopsisExpanded=!synopsisExpanded; synopsis.visibility=if(synopsisExpanded) View.VISIBLE else View.GONE
-            synopsisButton.text=if(synopsisExpanded) "收起简介" else "完整简介"
+        val maxGroup=(data.episodes.lastIndex/20).coerceAtLeast(0);group=group.coerceIn(0,maxGroup)
+        val groupScroll=HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled=false }
+        val groups=row();groupScroll.addView(groups);val groupButtons=mutableListOf<View>()
+        (0..maxGroup).forEach { part ->
+            val first=part*20+1;val last=minOf((part+1)*20,data.episodes.size)
+            val control=BrowseButton(this,"$first—$last",BrowseButton.Role.TAB,part==group) { group=part;showDetail(true) }.apply { tag="detail:group:$part";textSize=12f }
+            groups.addView(control,lp(-2,-2).apply { rightMargin=dp(6) });groupButtons+=control
         }
-        synopsisButton.tag="detail:synopsis"
-        (favorite.parent as LinearLayout).addView(synopsisButton,lp(-2,-2).apply { leftMargin=dp(10) })
-        val back=button("‹ 返回") { goBack() }.apply { tag="detail:back"; textSize=12f; background=rounded(Color.TRANSPARENT); nextFocusUpId=nav[tab].id; nextFocusDownId=play.id }
-        content.addView(back,lp(-2,dp(36)).apply { bottomMargin=dp(12) })
-        hero.onFocused={ scroll.post { scroll.smoothScrollTo(0,0) } }
-        content.addView(hero,lp(-1,hero.preferredHeight).apply { bottomMargin=dp(20) })
-        content.addView(synopsis)
-        detailRefreshStatus=button("共 ${data.episodes.size} 集 · 刷新分集") { refreshDetail(force=true) }.apply {
-            tag="detail:refresh"; textSize=12f; nextFocusUpId=play.id
-            content.addView(this,lp(-2,-2).apply { bottomMargin=dp(12) })
-        }
-        val later=button(if(library.queued(data.series.id)) "已在稍后看" else "稍后看") { library.toggleLater(data.series);showDetail(false,true) }.apply { tag="detail:later" }
-        (favorite.parent as LinearLayout).addView(later,lp(-2,-2).apply { leftMargin=dp(8) })
-        val heroActions=listOf(play,favorite,synopsisButton,later)
-        heroActions.forEachIndexed { index,view -> view.nextFocusUpId=back.id; view.nextFocusLeftId=heroActions[(index-1).coerceAtLeast(0)].id; view.nextFocusRightId=heroActions[(index+1).coerceAtMost(heroActions.lastIndex)].id }
-        nav.forEach { it.nextFocusDownId=back.id }
-        val groupRow=row(); groupRow.setPadding(0,dp(3),0,dp(5))
-        val maxGroup=data.episodes.lastIndex/20; group=group.coerceIn(0,maxGroup)
-        val previous=addButton(groupRow,"‹ 上一组") { if(group>0) { group--; showDetail(true) } }.apply { isEnabled=group>0; isFocusable=group>0; alpha=if(group>0) 1f else .4f }
-        previous.tag="detail:previous"
-        groupRow.addView(text("第 ${group*20+1}—${minOf((group+1)*20,data.episodes.size)} 集",16f).apply { gravity=Gravity.CENTER },lp(dp(190),dp(42)))
-        val nextGroup=addButton(groupRow,"下一组 ›") { if(group<maxGroup) { group++; showDetail(true) } }.apply { isEnabled=group<maxGroup; isFocusable=group<maxGroup; alpha=if(group<maxGroup) 1f else .4f }
-        nextGroup.tag="detail:next"
+        groupRow.addView(groupScroll,lp(0,-2).apply { weight=1f;leftMargin=dp(10) })
         lateinit var jump: TextView
-        jump=addButton(groupRow,"跳转集数") { tvTools.episodePicker(data.episodes.size,episodeIndex,jump) { target -> episodeIndex=target; group=target/20; showDetail(true) } }
-        jump.tag="detail:jump"
-        content.addView(groupRow)
+        jump=BrowseButton(this,"跳转集数 ›",BrowseButton.Role.TEXT) { tvTools.episodePicker(data.episodes.size,episodeIndex,jump) { target -> episodeIndex=target;group=target/20;showDetail(true) } }.apply { tag="detail:jump";textSize=12f }
+        groupRow.addView(jump);content.addView(groupRow)
         val episodes=mutableListOf<View>()
-        (group*20 until minOf((group+1)*20,data.episodes.size)).toList().chunked(10).forEach { numbers ->
+        val columns=if(BrowseLayout.compact(TvStyle.windowDp(this)) || resources.configuration.fontScale>1.2f) 5 else 10
+        (group*20 until minOf((group+1)*20,data.episodes.size)).toList().chunked(columns).forEach { numbers ->
             val line=row()
-            numbers.forEach { index -> val item=button("${index+1}",index==episodeIndex) { playEpisode(index,if(progress?.episodeId==data.episodes[index] && !progress.completed) progress.position else 0) }; item.tag="detail:episode:${data.episodes[index]}"; item.contentDescription="第 ${index+1} 集"; line.addView(item,lp(0,dp(42)).apply { weight=1f; rightMargin=dp(6) }); episodes+=item }
-            repeat(10-numbers.size) { line.addView(Space(this),lp(0,dp(42)).apply { weight=1f; rightMargin=dp(6) }) }
-            content.addView(line,lp(-1,dp(49)))
+            numbers.forEach { index ->
+                val item=BrowseButton(this,"${index+1}",if(index==episodeIndex) BrowseButton.Role.PRIMARY else BrowseButton.Role.ACTION) { playEpisode(index,if(progress?.episodeId==data.episodes[index] && !progress.completed) progress.position else 0) }
+                item.tag="detail:episode:${data.episodes[index]}";item.contentDescription="第${index+1}集"
+                line.addView(item,lp(0,dp(40)).apply { weight=1f;rightMargin=dp(6) });episodes+=item
+            }
+            repeat(columns-numbers.size) { line.addView(Space(this),lp(0,dp(40)).apply { weight=1f;rightMargin=dp(6) }) }
+            content.addView(line,lp(-1,dp(47)))
         }
-        episodes.forEachIndexed { i,v -> v.nextFocusLeftId=if(i%10==0) v.id else episodes[i-1].id; v.nextFocusRightId=if(i%10==9 || i==episodes.lastIndex) v.id else episodes[i+1].id; v.nextFocusUpId=if(i>=10) episodes[i-10].id else jump.id; v.nextFocusDownId=if(i+10<episodes.size) episodes[i+10].id else v.id }
-        heroActions.forEach { it.nextFocusDownId=detailRefreshStatus!!.id }
-        detailRefreshStatus!!.nextFocusDownId=jump.id
-        listOf(previous,nextGroup,jump).forEach { it.nextFocusUpId=detailRefreshStatus!!.id; it.nextFocusDownId=episodes.first().id }
-        if(focusEpisode) episodes.getOrNull((episodeIndex-group*20).coerceIn(0,episodes.lastIndex))?.requestFocus() else play.requestFocus()
+        episodes.forEachIndexed { i,v ->
+            v.nextFocusLeftId=if(i%columns==0) shell.selectedNav.id else episodes[i-1].id
+            v.nextFocusRightId=if(i%columns==columns-1 || i==episodes.lastIndex) v.id else episodes[i+1].id
+            v.nextFocusUpId=if(i>=columns) episodes[i-columns].id else groupButtons.getOrNull(group)?.id ?: jump.id
+            v.nextFocusDownId=if(i+columns<episodes.size) episodes[i+columns].id else v.id
+        }
+        val play=header.play
+        back.nextFocusLeftId=shell.selectedNav.id;back.nextFocusDownId=play.id
+        header.actions.forEachIndexed { i,view ->
+            view.nextFocusUpId=header.synopsisButton.id;view.nextFocusDownId=groupButtons.getOrNull(group)?.id ?: jump.id
+            view.nextFocusLeftId=header.actions.getOrNull(i-1)?.id ?: shell.selectedNav.id;view.nextFocusRightId=header.actions.getOrNull(i+1)?.id ?: view.id
+        }
+        header.synopsisButton.nextFocusUpId=back.id;header.synopsisButton.nextFocusDownId=play.id;header.synopsisButton.nextFocusLeftId=shell.selectedNav.id
+        (groupButtons+listOfNotNull(detailRefreshStatus,jump)).forEach { it.nextFocusUpId=play.id;it.nextFocusDownId=episodes.firstOrNull()?.id ?: play.id }
+        shell.enterContent={ play.requestFocus() }
+        groupButtons.getOrNull(group)?.let { selected -> groupScroll.post { groupScroll.scrollTo(selected.left,0) } }
+        if(focusEpisode) episodes.getOrNull((episodeIndex-group*20).coerceIn(0,(episodes.size-1).coerceAtLeast(0)))?.requestFocus() ?: play.requestFocus() else play.requestFocus()
         if(focusedTag!=null) root.findViewWithTag<View>(focusedTag)?.takeIf { it.isFocusable && it.isShown }?.requestFocus()
-        if(savedY!=null) { val ticket=generation; scroll.post { if(generation==ticket) scroll.scrollTo(0,savedY) } }
+        if(savedY!=null) { val ticket=generation;scroll.post { if(generation==ticket) scroll.scrollTo(0,savedY) } }
     }
     private fun playEpisode(index: Int,position: Long=0,autoplay: Boolean=true,recovering: Boolean=false,qualityOverride: Int?=null) {
         updater.interrupt()

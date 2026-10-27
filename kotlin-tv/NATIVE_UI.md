@@ -2,6 +2,14 @@
 
 生产代码继续使用 Kotlin / View / Media3。`MainActivity` 管理详情、播放器与设置；`NativeBrowseController` 管理左侧导航、页面状态、请求取消与扫码服务。`PosterCardView` 供首页、分类、搜索、榜单与本机片单共用；`PosterGridView` 使用 RecyclerView，按作品 ID 恢复焦点。
 
+## 设计契约
+
+视觉与遥控器规则以 [DESIGN.md](DESIGN.md) 为准。`BrowseLayout` 按逻辑窗口宽度和字体倍率决定侧栏、可用空间与列数；正常960×540dp为首页7张、分类／片单6列、榜单5列、搜索结果3列。紧凑窗口和大字体降低列数，不靠修改设备密度或压缩字号适配。
+
+`BrowseScaffold` 为浏览与详情共用侧栏和内容边距；`BrowseButton` 区分父标签、筛选、子榜胶囊、文字入口及主次操作，`BrowseStatus` 分离加载说明和可执行操作。详情使用平面 `DetailHeader`，正常窗口首屏呈现20集，完整简介使用弹窗；紧凑窗口仍可纵向到达全部选集。展开筛选限高裁切并在内部滚动，选项按宽度换行。
+
+图片加载区分CENTER_CROP与FIT_CENTER的解码目标，同时保留原有采样、缓存和内存上限。海报与焦点框采用相同圆角；不添加海报缩放动画或渐变背景。
+
 ## 内容契约
 
 - 真人剧、漫剧、AI剧目录独立查询，默认按最高热度排序；重置恢复该默认条件。分类的 `default` 请求只取得动态字典，所有结果页均使用 `only_content`，从该结果页开始保存 `session_id`、`next_offset`；不混用初始化游标，不按返回条数推算偏移。

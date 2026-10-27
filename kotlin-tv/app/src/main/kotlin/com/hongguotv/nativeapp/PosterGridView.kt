@@ -16,6 +16,13 @@ class PosterGridView(context: Context,private val columns: Int,private val sideb
     data class Item(val series: Series,val caption: String="",val fraction: Float?=null)
     data class Anchor(val id: String="",val position: Int=0,val offset: Int=0,val focus: Boolean=false)
     var topTarget: View?=null
+    var bottomTarget: View?=null
+        set(value) {
+            field=value
+            value?.setOnKeyListener { _,key,event ->
+                if(key==KeyEvent.KEYCODE_DPAD_UP && event.action==KeyEvent.ACTION_DOWN && rows.isNotEmpty()) { move(rows.lastIndex);true } else false
+            }
+        }
     private var rows=emptyList<Item>()
     private var focusId=""
     private var desired: String?=null
@@ -41,7 +48,7 @@ class PosterGridView(context: Context,private val columns: Int,private val sideb
                 when(key) {
                     KeyEvent.KEYCODE_DPAD_LEFT -> { if(index%columns==0) sidebar.requestFocus() else move(index-1);true }
                     KeyEvent.KEYCODE_DPAD_RIGHT -> { move(TvGridFocus.right(index,rows.size,columns));true }
-                    KeyEvent.KEYCODE_DPAD_DOWN -> { val next=TvGridFocus.down(index,rows.size,columns);if(next!=null) move(next) else { pendingDown=index;append() };true }
+                    KeyEvent.KEYCODE_DPAD_DOWN -> { val next=TvGridFocus.down(index,rows.size,columns);if(next!=null) move(next) else if(bottomTarget?.isShown==true && bottomTarget?.isFocusable==true) bottomTarget?.requestFocus() else { pendingDown=index;append() };true }
                     KeyEvent.KEYCODE_DPAD_UP -> { if(index>=columns) { move(index-columns);true } else topTarget?.let { it.requestFocus();true } ?: false }
                     KeyEvent.KEYCODE_MENU -> { actions(item.series,card);true }
                     else -> false
@@ -59,7 +66,8 @@ class PosterGridView(context: Context,private val columns: Int,private val sideb
         addOnScrollListener(object: OnScrollListener() { override fun onScrolled(view: RecyclerView,dx: Int,dy: Int) { if(dy>0 && manager.findLastVisibleItemPosition()>=rows.size-columns*2) append() } })
     }
     private fun move(index: Int) { rows.getOrNull(index)?.let { desired=it.series.id;scrollToPosition(index);post { manager.findViewByPosition(index)?.requestFocus()?.also { desired=null } } } }
-    fun capture()=Anchor(focusId,manager.findFirstVisibleItemPosition().coerceAtLeast(0),manager.findViewByPosition(manager.findFirstVisibleItemPosition())?.top ?: 0,hasFocus())
+    // LayoutManager offsets are relative to the padded start, using decorated card bounds.
+    fun capture()=Anchor(focusId,manager.findFirstVisibleItemPosition().coerceAtLeast(0),manager.findViewByPosition(manager.findFirstVisibleItemPosition())?.let { manager.getDecoratedTop(it)-paddingTop } ?: 0,hasFocus())
     fun submit(next: List<Item>,anchor: Anchor?=null) {
         val saved=anchor ?: capture();val oldCount=rows.size
         rows=next
@@ -69,7 +77,10 @@ class PosterGridView(context: Context,private val columns: Int,private val sideb
         if(!isAppend || anchor!=null) manager.scrollToPositionWithOffset(saved.position.coerceAtMost((rows.size-1).coerceAtLeast(0)),saved.offset)
         if(saved.focus && rows.isNotEmpty()) {
             val target=rows.indexOfFirst { it.series.id==saved.id }.takeIf { it>=0 } ?: saved.position.coerceIn(0,rows.lastIndex)
-            desired=rows[target].series.id;post { manager.findViewByPosition(target)?.requestFocus() }
+            desired=rows[target].series.id;post {
+                manager.findViewByPosition(target)?.requestFocus()
+                if(!isAppend || anchor!=null) { stopScroll();manager.scrollToPositionWithOffset(saved.position.coerceAtMost(rows.lastIndex),saved.offset) }
+            }
         }
         if(!isAppend) pendingDown=null
         pendingDown?.let { index -> if(next.size>oldCount) { if(hasFocus()) move((index+columns).coerceAtMost(next.lastIndex));pendingDown=null } }

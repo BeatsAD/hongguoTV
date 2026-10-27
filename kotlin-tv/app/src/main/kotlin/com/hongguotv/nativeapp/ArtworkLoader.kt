@@ -35,7 +35,7 @@ class ArtworkLoader(context: Context) {
         private const val MAX_BYTES = 4 * 1024 * 1024
     }
 
-    private data class Key(val url: String, val width: Int, val height: Int)
+    private data class Key(val url: String, val width: Int, val height: Int, val cover: Boolean)
     private class Binding(view: ImageView, val owner: Long, val url: String, var priority: Int,
                           val width: Int, val height: Int) {
         val view = WeakReference(view)
@@ -108,7 +108,7 @@ class ArtworkLoader(context: Context) {
         if (width <= 0 || height <= 0) return
         // A malformed layout cannot ask an old TV to allocate a full-screen, multi-megapixel thumbnail.
         val scale = min(1.0, 1024.0 / max(width, height))
-        val key = Key(binding.url, max(1, (width * scale).toInt()), max(1, (height * scale).toInt()))
+        val key = Key(binding.url, max(1, (width * scale).toInt()), max(1, (height * scale).toInt()),view.scaleType==ImageView.ScaleType.CENTER_CROP)
         if (binding.key != key) { detachJob(binding); binding.key = key; binding.failed = null }
         if (binding.applied == key || binding.failed == key) return
         cache.get(key)?.let { bitmap -> view.setImageBitmap(bitmap); binding.applied = key; return }
@@ -270,11 +270,9 @@ class ArtworkLoader(context: Context) {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
         if (bounds.outWidth !in 1..32768 || bounds.outHeight !in 1..32768) { if(fromCache) { disk.invalidate(job.key.url); return fetch(job,true) }; return null }
-        // Fit the entire source into the measured target. Cropping at decode time cannot be
-        // undone by ImageView.FIT_CENTER and used to remove most of a portrait poster.
-        val fit = min(1.0, min(job.key.width.toDouble() / bounds.outWidth, job.key.height.toDouble() / bounds.outHeight))
-        val width = max(1, (bounds.outWidth * fit).toInt())
-        val height = max(1, (bounds.outHeight * fit).toInt())
+        // Keep all source content for FIT_CENTER, but do not undersize a CENTER_CROP poster
+        // and then ask the UI to enlarge it again. Sampling and memory budgets still apply.
+        val (width,height)=ArtworkSizing.target(bounds.outWidth,bounds.outHeight,job.key.width,job.key.height,job.key.cover)
         var sample = 1
         while (bounds.outWidth / (sample * 2) >= width && bounds.outHeight / (sample * 2) >= height) sample *= 2
         if ((bounds.outWidth / sample).toLong() * (bounds.outHeight / sample) > (if (lowRam) 2 else 4) * 1024 * 1024) return null

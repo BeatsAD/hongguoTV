@@ -7,11 +7,11 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 /** Small vector-like glyphs, drawn at the requested density without bitmap assets. */
-class TvGlyph(private var kind: Kind,private var color: Int=TvStyle.text): Drawable() {
-    enum class Kind { HOME, RANK, BOOKMARK, LAYERS, AI, SEARCH, PLUS, CHECK, ARROW, SETTINGS, PHONE, HISTORY, PLAY, PAUSE, PREVIOUS, SKIP, REWIND, FORWARD, NEXT, QUALITY, SPEED, FRAME, TRANSFER, EYE, INFO, CODE }
+class TvGlyph(private var kind: Kind,private var color: Int=TvStyle.text,private val filled: Boolean=false): Drawable() {
+    enum class Kind { HOME, RANK, BOOKMARK, LAYERS, AI, SEARCH, PLUS, CHECK, ARROW, SETTINGS, PHONE, HISTORY, PLAY, PAUSE, PREVIOUS, SKIP, REWIND, FORWARD, NEXT, QUALITY, SPEED, FRAME, FILM, TRANSFER, EYE, INFO, CODE }
     private val paint=Paint(Paint.ANTI_ALIAS_FLAG).apply { style=Paint.Style.STROKE; strokeWidth=1.7f; strokeCap=Paint.Cap.ROUND; strokeJoin=Paint.Join.ROUND }
     override fun draw(canvas: Canvas) {
-        val save=canvas.save(); canvas.translate(bounds.left.toFloat(),bounds.top.toFloat()); canvas.scale(bounds.width()/24f,bounds.height()/24f); paint.color=color
+        val save=canvas.save(); canvas.translate(bounds.left.toFloat(),bounds.top.toFloat()); canvas.scale(bounds.width()/24f,bounds.height()/24f); paint.color=color;paint.style=if(filled) Paint.Style.FILL else Paint.Style.STROKE
         fun line(x: Float,y: Float,a: Float,b: Float)=canvas.drawLine(x,y,a,b,paint)
         fun circle(x: Float,y: Float,r: Float)=canvas.drawCircle(x,y,r,paint)
         when(kind) {
@@ -34,6 +34,7 @@ class TvGlyph(private var kind: Kind,private var color: Int=TvStyle.text): Drawa
             Kind.REWIND,Kind.FORWARD -> { val forward=kind==Kind.FORWARD; if(forward) { canvas.save(); canvas.rotate(180f,12f,12f) }; canvas.drawArc(4f,4f,20f,20f,210f,280f,false,paint); line(3f,5f,4f,12f); line(4f,12f,11f,10f); if(forward) canvas.restore() }
             Kind.NEXT -> { line(9f,5f,16f,12f); line(16f,12f,9f,19f) }
             Kind.QUALITY,Kind.FRAME -> { canvas.drawRoundRect(2f,4f,22f,18f,2f,2f,paint); if(kind==Kind.QUALITY) { line(12f,18f,12f,22f); line(7f,22f,17f,22f) } }
+            Kind.FILM -> { canvas.drawRoundRect(2f,4f,22f,20f,1f,1f,paint);line(7f,4f,7f,20f);line(17f,4f,17f,20f);for(y in listOf(8f,12f,16f)) { line(2f,y,7f,y);line(17f,y,22f,y) } }
             Kind.TRANSFER -> { line(7f,3f,7f,20f); line(3f,7f,7f,3f); line(7f,3f,11f,7f); line(17f,4f,17f,21f); line(13f,17f,17f,21f); line(17f,21f,21f,17f) }
             Kind.EYE -> { val p=Path().apply { moveTo(2f,12f); quadTo(12f,-1f,22f,12f); quadTo(12f,25f,2f,12f) }; canvas.drawPath(p,paint); circle(12f,12f,3f) }
             Kind.INFO -> { circle(12f,12f,9f); line(12f,10f,12f,17f); circle(12f,6.5f,.5f) }

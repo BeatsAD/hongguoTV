@@ -9,12 +9,17 @@ import com.hongguotv.core.FilterDimension
 class FilterPanelView(context: Context,rows: List<FilterDimension>,selected: Map<String,List<String>>,choose: (FilterDimension,String?)->Unit): ScrollView(context) {
     init {
         val ui=BrowseUi(context);val body=ui.column();setBackgroundColor(TvStyle.surface)
+        clipChildren=true;clipToPadding=true;clipToOutline=true
         body.setPadding(ui.dp(8),ui.dp(8),ui.dp(8),ui.dp(8))
+        isVerticalScrollBarEnabled=false
         rows.forEach { row ->
-            body.addView(ui.text(row.label,12f,TvStyle.muted))
-            val options=listOf(CapsuleButton(context,"全部",selected[row.id].isNullOrEmpty()) { choose(row,null) }.apply { tag="filter:${row.id}:all" })+row.options.map { option -> CapsuleButton(context,option.label,option.id in selected[row.id].orEmpty()) { choose(row,option.id) }.apply { tag="filter:${row.id}:${option.id}" } }
-            // A horizontal selector is scrollable even for unusually large upstream dictionaries.
-            ui.line(body,options)
+            val line=ui.row().apply { gravity=android.view.Gravity.TOP }
+            line.addView(ui.text(row.label,12f,TvStyle.muted).apply { setPadding(0,ui.dp(7),0,0) },LinearLayout.LayoutParams(ui.dp(50),-2))
+            val options=BrowseFlow(context,5)
+            options.addView(BrowseButton(context,"全部",BrowseButton.Role.FILTER,selected[row.id].isNullOrEmpty()) { choose(row,null) }.apply { tag="filter:${row.id}:all" })
+            row.options.forEach { option -> options.addView(BrowseButton(context,option.label,BrowseButton.Role.FILTER,option.id in selected[row.id].orEmpty()) { choose(row,option.id) }.apply { tag="filter:${row.id}:${option.id}" }) }
+            line.addView(options,LinearLayout.LayoutParams(0,-2,1f))
+            body.addView(line,LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=ui.dp(8) })
         }
         addView(body)
     }

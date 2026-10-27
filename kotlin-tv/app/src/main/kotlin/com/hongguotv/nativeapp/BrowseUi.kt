@@ -10,9 +10,10 @@ internal class BrowseUi(val context: Context) {
     fun text(value: String,size: Float=14f,color: Int=TvStyle.text)=TextView(context).apply { text=value;textSize=size;setTextColor(color);includeFontPadding=false }
     fun column()=LinearLayout(context).apply { orientation=LinearLayout.VERTICAL;clipChildren=false }
     fun row()=LinearLayout(context).apply { gravity=Gravity.CENTER_VERTICAL;clipChildren=false }
-    fun title(value: String)=text(value,26f).apply { setPadding(dp(4),dp(5),0,dp(16)) }
+    fun title(value: String,size: Float=24f)=text(value,size).apply { typeface=android.graphics.Typeface.create("sans-serif-medium",android.graphics.Typeface.NORMAL);maxLines=1;setPadding(0,dp(3),0,dp(8)) }
+    fun heading(value: String,size: Float=24f)=row().apply { minimumHeight=dp(36);addView(title(value,size),LinearLayout.LayoutParams(0,-2,1f)) }
     fun line(parent: LinearLayout,items: List<android.view.View>) {
         val row=row();items.forEach { row.addView(it,LinearLayout.LayoutParams(-2,-2).apply { rightMargin=dp(6) }) }
-        parent.addView(HorizontalScrollView(context).apply { isHorizontalScrollBarEnabled=false;addView(row) },LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=dp(7) })
+        parent.addView(HorizontalScrollView(context).apply { isHorizontalScrollBarEnabled=false;clipToPadding=false;addView(row) },LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=dp(7) })
     }
 }
