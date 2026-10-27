@@ -14,7 +14,6 @@ class CategoryRepository(repository: ContentRepository) {
             val initialQuery=CategoryQuery(query.type)
             val initial=parse(api.request("/reading/distribution/category/landpage/v/",body=requestBody(initialQuery,null,emptyList(),true).toString()),initialQuery)
             synchronized(dictionaries) { dictionaries[query.type]=initial.dimensions }
-            if(query.selections.isEmpty()) return initial
         }
         val body=requestBody(query,cursor,shown)
         val page=parse(api.request("/reading/distribution/category/landpage/v/",body=body.toString()),query)

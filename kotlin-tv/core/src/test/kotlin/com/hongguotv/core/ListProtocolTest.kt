@@ -28,7 +28,7 @@ class ListProtocolTest {
         assertEquals(listOf("b"),CategoryQuery(ContentType.SHORT).choose(row.copy(selectionType=1),"a").choose(row.copy(selectionType=1),"b").selections["theme"])
         assertThrows(IllegalArgumentException::class.java) { CategoryRepository.requestBody(query,CatalogCursor(18,"s","wrong"),emptyList()) }
     }
-    @Test fun `a filtered first page requests the dictionary separately then only content`() {
+    @Test fun `dictionary responses never establish a content pagination session`() {
         val bodies=mutableListOf<JSONObject>()
         val http=okhttp3.OkHttpClient.Builder().addInterceptor { chain ->
             val buffer=okio.Buffer();chain.request().body!!.writeTo(buffer);bodies+=JSONObject(buffer.readUtf8())
@@ -37,10 +37,10 @@ class ListProtocolTest {
         }.build()
         val repo=CategoryRepository(ContentRepository(http))
         val query=CategoryQuery(ContentType.SHORT,mapOf("sort" to listOf("hot_score")))
-        repo.load(query);repo.load(query)
-        assertEquals(listOf("default","only_content","only_content"),bodies.map { it.getString("req_type") })
+        repo.load(CategoryQuery(ContentType.SHORT));repo.load(query);repo.load(query)
+        assertEquals(listOf("default","only_content","only_content","only_content"),bodies.map { it.getString("req_type") })
         assertTrue(bodies[0].getBoolean("need_selector_panel"));assertFalse(bodies[1].getBoolean("need_selector_panel"))
-        assertEquals("hot_score",bodies[1].getJSONObject("select_items").getJSONArray("sort").getString(0))
+        assertEquals("hot_score",bodies[2].getJSONObject("select_items").getJSONArray("sort").getString(0))
     }
     @Test fun `valid empty is different from blank body refusal or missing list`() {
         val query=CategoryQuery(ContentType.AI)
