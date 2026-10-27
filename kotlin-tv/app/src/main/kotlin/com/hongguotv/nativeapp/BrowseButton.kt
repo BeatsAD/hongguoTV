@@ -10,7 +10,10 @@ import android.widget.LinearLayout
 import android.widget.TextView
 
 /** A role is deliberate: navigation tabs, filters and status text are not all capsules. */
-open class BrowseButton(context: Context,value: String,private val role: Role=Role.ACTION,selected: Boolean=false,action: ()->Unit): TextView(context) {
+open class BrowseButton(context: Context,value: String,private val role: Role=Role.ACTION,selected: Boolean=false,private val action: ()->Unit): TextView(context) {
+    internal var focusSelection: FocusSelection?=null
+        private set
+    fun autoSelect(delay: Long=0): BrowseButton { focusSelection=FocusSelection(this,delay,action);return this }
     enum class Role { TEXT, ACTION, PRIMARY, TAB, FILTER, CAPSULE, SEARCH }
     init {
         val ui=BrowseUi(context)
@@ -34,7 +37,7 @@ open class BrowseButton(context: Context,value: String,private val role: Role=Ro
             setCompoundDrawables(TvGlyph(TvGlyph.Kind.SEARCH,TvStyle.muted).apply { setBounds(0,0,ui.dp(15),ui.dp(15)) },null,null,null)
             compoundDrawablePadding=ui.dp(7);gravity=Gravity.CENTER_VERTICAL
         }
-        paint();setOnFocusChangeListener { _,_->paint() };setOnClickListener { action() }
+        paint();setOnFocusChangeListener { _,_->paint() };setOnClickListener { focusSelection?.confirm() ?: action() }
     }
 }
 

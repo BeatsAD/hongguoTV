@@ -35,6 +35,8 @@ class NativeBrowseController(private val activity: Activity,private val reposito
     private var root: FrameLayout?=null
     private var content: LinearLayout?=null
     private var sidebar: View?=null
+    private var scaffold: BrowseScaffold?=null
+    private var restoreContentFocus=true
     private var home: HomeScreen?=null
     private var homePosition: HomeScreen.Position?=null
     private var catalogView: CatalogScreen?=null
@@ -76,10 +78,12 @@ class NativeBrowseController(private val activity: Activity,private val reposito
         states.filterKeys { route!="catalog" || it!=type }.values.forEach { it.items=emptyList();it.cursor=null;it.hasMore=true }
     }
     fun show(target: FrameLayout) { capture();stopJobs();closePhone();root=target;active=true;renderShell() }
-    fun select(next: String,nextType: ContentType=type) {
-        capture();stopJobs();closePhone();route=next;type=nextType
+    fun select(next: String,nextType: ContentType=type,keepNavigationFocus: Boolean=false) {
+        val destinationType=if(next=="catalog") nextType else type
+        if(active && route==next && type==destinationType) return
+        capture();stopJobs();closePhone();route=next;type=destinationType
         if(next=="catalog") library.contentType=type
-        active=true;renderShell()
+        active=true;renderShell(keepNavigationFocus)
     }
     private fun <T> request(key: String,action: ()->T,success: (T)->Unit,failure: (Throwable)->Unit) {
         if(!active || closed || key in jobs) return
@@ -99,12 +103,14 @@ class NativeBrowseController(private val activity: Activity,private val reposito
         jobs[key]=scope to future
     }
     private fun error(e: Throwable)=when(e) { is ContentRequestDeferredException->"服务冷却中，请稍后重试";is java.net.UnknownHostException->"无法连接内容服务，请检查网络";is java.net.ConnectException->"无法连接内容服务";is java.net.SocketTimeoutException->"连接超时";else->e.message.orEmpty().replace(Regex("https?://\\S+"),"[地址]").take(95).ifBlank { "加载失败" } }
-    private fun renderShell() {
+    private fun renderShell(keepNavigationFocus: Boolean=false) {
         val target=root ?: return
         home=null;catalogView=null;rankView=null;searchView=null;localGrid=null
-        target.removeAllViews()
-        val shell=BrowseScaffold(activity,route,type) { key,genre -> select(key,genre) }
-        target.addView(shell,FrameLayout.LayoutParams(-1,-1))
+        restoreContentFocus=!keepNavigationFocus
+        val shell=scaffold?.takeIf { it.parent===target } ?: BrowseScaffold(activity,route,type) { key,genre -> select(key,genre,keepNavigationFocus=true) }.also {
+            target.removeAllViews();target.addView(it,FrameLayout.LayoutParams(-1,-1));scaffold=it
+        }
+        shell.body.removeAllViews();shell.select(route,type)
         sidebar=shell.selectedNav
         val body=shell.body;content=body
         shell.enterContent={ focusContent() }
@@ -118,9 +124,9 @@ class NativeBrowseController(private val activity: Activity,private val reposito
             "settings" -> { val scroll=TvScrollView(activity);val panel=ui.column();scroll.addView(panel);body.addView(scroll,LinearLayout.LayoutParams(-1,-1));settings(panel,sidebar!!) }
             else -> renderHome(body)
         }
-        sidebar?.requestFocus()
+        if(!keepNavigationFocus || shell.navigation.none { it.hasFocus() }) FocusIntent.during(false) { sidebar?.requestFocus() }
         // Restore content focus only when returning from a page that owned it.
-        main.post { if(active) when(route) {
+        main.post { if(active && !keepNavigationFocus) when(route) {
             "catalog" -> if(states.getValue(type).anchor.focus) catalogView?.grid?.submit(states.getValue(type).items.map { PosterGridView.Item(it) },states.getValue(type).anchor)
             "ranks" -> Unit
             "home" -> homePosition?.let { home?.restorePosition(it,it.focus.isNotBlank()) }
@@ -136,7 +142,7 @@ class NativeBrowseController(private val activity: Activity,private val reposito
             "catalog" -> catalogView?.grid?.takeIf { states.getValue(type).items.isNotEmpty() }?.focusFirst() ?: firstControl()
             "search" -> if(search.items.isNotEmpty()) searchView?.grid?.focusFirst() else firstControl()
             "ranks" -> if(ranking.entries.isNotEmpty()) rankView?.grid?.focusFirst() else firstControl()
-            "library" -> localGrid?.focusFirst() ?: firstControl()
+            "library" -> if(localGrid?.focusFirst()!=true) content?.findViewWithTag<View>("library:${section.name}")?.requestFocus() ?: firstControl()
             else -> firstControl()
         }
     }
@@ -178,7 +184,7 @@ class NativeBrowseController(private val activity: Activity,private val reposito
         val state=states.getValue(type)
         catalogView=CatalogScreen(activity,state,sidebar!!,load,{ openChecked(it,false) },actions,{ next ->
             stopJobs();state.reset(next);catalogView?.renderControls();loadCategory(true)
-        },{ loadCategory(true) },{ search.scope=type;select("search") }).also { body.addView(it,LinearLayout.LayoutParams(-1,0,1f)) }
+        },{ loadCategory(true) },{ search.scope=type;select("search") },restoreFocus=restoreContentFocus).also { body.addView(it,LinearLayout.LayoutParams(-1,0,1f)) }
         if(state.cursor==null && state.error.isBlank()) loadCategory()
     }
     private fun loadCategory(manual: Boolean=false) {
@@ -200,7 +206,7 @@ class NativeBrowseController(private val activity: Activity,private val reposito
         rankView=RankingScreen(activity,ranking,sidebar!!,load,{ entry -> when(entry) {
             is RankEntry.Actor -> info(entry.name,listOf("演员资料",entry.description,entry.heat,"暂无已验证的关联作品入口").filter(String::isNotBlank).joinToString("\n"),rankView)
             is RankEntry.Drama -> openChecked(entry.series,false)
-        } },actions,{ next -> stopJobs();ranking.query=next;ranking.cursor=null;ranking.hasMore=true;ranking.error="";ranking.anchor=PosterGridView.Anchor();rankView?.renderControls();loadRank(true) },{ loadRank(true) }).also { body.addView(it,LinearLayout.LayoutParams(-1,0,1f)) }
+        } },actions,{ next -> stopJobs();if(ranking.query!=next) ranking.entries=emptyList();ranking.query=next;ranking.cursor=null;ranking.hasMore=true;ranking.error="";ranking.anchor=PosterGridView.Anchor();rankView?.renderControls();loadRank(true) },{ loadRank(true) },restoreFocus=restoreContentFocus).also { body.addView(it,LinearLayout.LayoutParams(-1,0,1f)) }
         if(ranking.cursor==null && ranking.error.isBlank()) loadRank()
     }
     private fun loadRank(manual: Boolean=false) {
@@ -221,7 +227,7 @@ class NativeBrowseController(private val activity: Activity,private val reposito
         },::beginSearch,library.searches(),{ library.clearSearches();searchView?.showHistory(emptyList()) },{
             stopJobs();search.query="";search.items=emptyList();search.pages.clear();search.more.clear();search.error="";search.anchor=PosterGridView.Anchor()
             searchView?.showHistory(library.searches());searchView?.update()
-        },::startPhone,{ loadSearch(true) }).also { body.addView(it,LinearLayout.LayoutParams(-1,0,1f)) }
+        },::startPhone,{ loadSearch(true) },restoreFocus=restoreContentFocus).also { body.addView(it,LinearLayout.LayoutParams(-1,0,1f)) }
         startPhone();main.removeCallbacks(countdown);main.post(countdown)
         if(search.query.isNotBlank() && search.items.isEmpty() && search.error.isBlank()) loadSearch()
     }
@@ -272,24 +278,46 @@ class NativeBrowseController(private val activity: Activity,private val reposito
             }
         }
     }
-    private fun renderLibrary(body: LinearLayout) {
+    private fun renderLibrary(body: LinearLayout,focusTab: LibrarySection?=null) {
+        saveStatus?.takeIf { it.parent==null }?.let { body.addView(it) }
         val heading=ui.heading("我的片单")
         if(section==LibrarySection.FAVORITES) heading.addView(BrowseButton(activity,"检查收藏更新",BrowseButton.Role.TEXT) { checkFavorites() })
         if(section==LibrarySection.HISTORY) heading.addView(BrowseButton(activity,"清空观看记录",BrowseButton.Role.TEXT) { sidebar?.let(clearHistory) })
         body.addView(heading)
         val counts=mapOf(LibrarySection.FAVORITES to library.favorites().size,LibrarySection.LATER to library.later().size,LibrarySection.HISTORY to library.history().size)
-        val tabs=LibrarySection.entries.map { item -> BrowseButton(activity,"${item.label}  ${counts.getValue(item)}",BrowseButton.Role.TAB,section==item) { capture();section=item;select("library") } }
+        val tabs=LibrarySection.entries.map { item -> BrowseButton(activity,"${item.label}  ${counts.getValue(item)}",BrowseButton.Role.TAB,section==item) {
+            if(section!=item) {
+                capture();section=item;body.removeAllViews();renderLibrary(body,focusTab=item);routeChanged(tab())
+            }
+        }.autoSelect().apply { tag="library:${item.name}" } }
         ui.line(body,tabs)
+        tabs.forEachIndexed { index,view ->
+            view.nextFocusLeftId=tabs.getOrNull(index-1)?.id ?: sidebar!!.id
+            view.nextFocusRightId=tabs.getOrNull(index+1)?.id ?: view.id
+            view.setOnKeyListener { _,key,event ->
+                if(key==android.view.KeyEvent.KEYCODE_DPAD_DOWN && event.action==android.view.KeyEvent.ACTION_DOWN) { localGrid?.focusFirst();true } else false
+            }
+        }
         val items=when(section) { LibrarySection.FAVORITES->library.favorites();LibrarySection.LATER->library.later();LibrarySection.HISTORY->library.history().map { it.series } }
         localGrid=PosterGridView(activity,TvStyle.catalogColumns(activity),sidebar!!,load,{ openChecked(it,section==LibrarySection.HISTORY) },actions,{}).also { view ->
             view.topTarget=tabs[LibrarySection.entries.indexOf(section)];body.addView(view,LinearLayout.LayoutParams(-1,0,1f));view.submit(items.map { item ->
                 val progress=library.progress(item.id);PosterGridView.Item(item,if(section==LibrarySection.HISTORY && progress!=null) "第${progress.episodeIndex+1}集 · 已看${time(progress.position)}" else if(section==LibrarySection.FAVORITES) (if(library.watched(item.id)) "已看 · " else "")+library.favoriteLabel(item.id) else "",progress?.takeIf { section==LibrarySection.HISTORY && it.duration>0 }?.let { it.position.toFloat()/it.duration })
-            },localAnchors[section])
+            },localAnchors[section]?.let { it.copy(focus=it.focus && restoreContentFocus && focusTab==null) })
         }
         body.addView(ui.text(if(items.isEmpty()) "暂无本机记录" else "本机记录 · ${items.size}部 · 长按或菜单键管理"+if(section==LibrarySection.FAVORITES) " · ${favoriteStatus()}" else "",12f,TvStyle.muted))
+        if(focusTab!=null) body.findViewWithTag<View>("library:${focusTab.name}")?.let { tabView ->
+            FocusIntent.during(false) { tabView.requestFocus() }
+        }
     }
     fun saveStatusChanged() { saveStatus?.visibility=if(library.saveFailed) View.VISIBLE else View.GONE }
-    fun refreshLibrary() { if(!active) return;capture();if(route=="home") updateHome() else if(route=="library") { content?.removeAllViews();renderLibrary(content!!);routeChanged(tab()) } }
+    fun refreshLibrary() {
+        if(!active) return
+        capture()
+        if(route=="home") updateHome() else if(route=="library") {
+            val body=content ?: return;val focus=RemoteFocus.capture(body)
+            body.removeAllViews();renderLibrary(body);routeChanged(tab());RemoteFocus.restore(body,focus)
+        }
+    }
     private fun openChecked(series: Series,resume: Boolean) {
         if(!series.playable) { info(series.title,series.description.ifBlank { "待上线或暂无可播放分集" },content);return };open(series,resume)
     }

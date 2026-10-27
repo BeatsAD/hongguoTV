@@ -86,5 +86,5 @@ class PosterGridView(context: Context,private val columns: Int,private val sideb
         pendingDown?.let { index -> if(next.size>oldCount) { if(hasFocus()) move((index+columns).coerceAtMost(next.lastIndex));pendingDown=null } }
     }
     private var cardsSnapshot=emptyList<Item>()
-    fun focusFirst() { if(rows.isNotEmpty()) move(0) }
+    fun focusFirst(): Boolean { if(rows.isEmpty()) return false;move(0);return true }
 }

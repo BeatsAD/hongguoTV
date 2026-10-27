@@ -13,6 +13,7 @@ internal class BrowseScaffold(context: Context,route: String,type: ContentType,n
     private val ui=BrowseUi(context)
     val body=ui.column()
     val navigation=mutableListOf<View>()
+    private val destinations=mutableMapOf<SidebarButton,Pair<String,ContentType?>>()
     lateinit var selectedNav: View
         private set
     var enterContent: ()->Unit={}
@@ -32,7 +33,7 @@ internal class BrowseScaffold(context: Context,route: String,type: ContentType,n
             val chosen=route==key && (key!="catalog" || genre==type)
             val kind=when(key) { "home"->TvGlyph.Kind.HOME;"search"->TvGlyph.Kind.SEARCH;"ranks"->TvGlyph.Kind.RANK;"library"->TvGlyph.Kind.BOOKMARK;"settings"->TvGlyph.Kind.SETTINGS;else->when(genre) { ContentType.COMIC->TvGlyph.Kind.LAYERS;ContentType.AI->TvGlyph.Kind.AI;else->TvGlyph.Kind.FILM } }
             val button=SidebarButton(context,label,kind,chosen) { navigate(key,genre ?: type) }.apply { tag="browse:$key:${genre?.storedValue.orEmpty()}" }
-            parent.addView(button,LayoutParams(-1,-2).apply { bottomMargin=ui.dp(3) });navigation+=button;if(chosen) selectedNav=button
+            parent.addView(button,LayoutParams(-1,-2).apply { bottomMargin=ui.dp(3) });navigation+=button;destinations[button]=key to genre;if(chosen) selectedNav=button
         }
         item(navBody,"首页","home");item(navBody,"搜索","search");item(navBody,"榜单","ranks");item(navBody,"我的片单","library")
         navBody.addView(ui.text("分类",11f,TvStyle.muted).apply { setPadding(ui.dp(7),ui.dp(14),0,ui.dp(8)) })
@@ -46,5 +47,17 @@ internal class BrowseScaffold(context: Context,route: String,type: ContentType,n
             view.nextFocusUpId=navigation.getOrNull(index-1)?.id ?: view.id;view.nextFocusDownId=navigation.getOrNull(index+1)?.id ?: view.id;view.nextFocusLeftId=view.id
             view.setOnKeyListener { _,key,event -> if(key==KeyEvent.KEYCODE_DPAD_RIGHT && event.action==KeyEvent.ACTION_DOWN) { enterContent();true } else false }
         }
+    }
+    fun select(route: String,type: ContentType) {
+        destinations.forEach { (button,destination) ->
+            val selected=destination.first==route && (route!="catalog" || destination.second==type)
+            button.select(selected);if(selected) selectedNav=button
+        }
+    }
+    override fun focusSearch(focused: View?,direction: Int): View? {
+        val next=super.focusSearch(focused,direction)
+        // Spatial search from content must return to its current destination, rather than
+        // accidentally activating whichever menu item happens to be closest vertically.
+        return if(focused !in navigation && next in navigation) selectedNav else next
     }
 }

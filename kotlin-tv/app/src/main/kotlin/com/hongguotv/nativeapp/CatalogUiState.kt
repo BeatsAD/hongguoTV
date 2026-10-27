@@ -13,7 +13,7 @@ class CatalogUiState(var query: CategoryQuery) {
     var expanded=false
     var anchor=PosterGridView.Anchor()
     var updatedAt=0L
-    fun reset(next: CategoryQuery) { query=next;cursor=null;hasMore=true;error="";anchor=PosterGridView.Anchor() }
+    fun reset(next: CategoryQuery) { if(query!=next) items=emptyList();query=next;cursor=null;hasMore=true;error="";anchor=PosterGridView.Anchor() }
 }
 class RankingUiState {
     var query=RankQuery()

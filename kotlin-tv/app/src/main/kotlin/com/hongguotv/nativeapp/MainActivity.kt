@@ -482,7 +482,7 @@ class MainActivity: Activity() {
         val savedY=if(preservePosition) detailScroll?.scrollY else null
         invalidatePage(); releaseCatalogViews(); screen=Screen.DETAIL; val data=detail ?: return showCatalog()
         val shell=browser.detailScaffold(root) { key,genre ->
-            invalidatePage();releaseCatalogViews();screen=Screen.CATALOG;browser.select(key,genre)
+            invalidatePage();releaseCatalogViews();screen=Screen.CATALOG;browser.select(key,genre,keepNavigationFocus=true)
         }
         val body=shell.body;nav.clear();nav.addAll(shell.navigation)
         saveStatusView=BrowseButton(this,"本机改动尚未保存 · 重试保存",BrowseButton.Role.TEXT) { library.flush() }.also {
@@ -519,7 +519,7 @@ class MainActivity: Activity() {
         val groups=row();groupScroll.addView(groups);val groupButtons=mutableListOf<View>()
         (0..maxGroup).forEach { part ->
             val first=part*20+1;val last=minOf((part+1)*20,data.episodes.size)
-            val control=BrowseButton(this,"$first—$last",BrowseButton.Role.TAB,part==group) { group=part;showDetail(true) }.apply { tag="detail:group:$part";textSize=12f }
+            val control=BrowseButton(this,"$first—$last",BrowseButton.Role.TAB,part==group) { group=part;showDetail(false,preservePosition=true) }.autoSelect().apply { tag="detail:group:$part";textSize=12f }
             groups.addView(control,lp(-2,-2).apply { rightMargin=dp(6) });groupButtons+=control
         }
         groupRow.addView(groupScroll,lp(0,-2).apply { weight=1f;leftMargin=dp(10) })
@@ -950,7 +950,8 @@ class MainActivity: Activity() {
     }
     @Deprecated("TV remote back is handled through the activity")
     override fun onBackPressed()=goBack()
-    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+    override fun dispatchKeyEvent(event: KeyEvent)=RemoteFocus.dispatch(event,{ currentFocus }) { dispatchRemoteKeyEvent(event) }
+    private fun dispatchRemoteKeyEvent(event: KeyEvent): Boolean {
         if(screen==Screen.PLAYER) {
             val key=event.keyCode
             if(panel && !playError && key==KeyEvent.KEYCODE_DPAD_DOWN) {

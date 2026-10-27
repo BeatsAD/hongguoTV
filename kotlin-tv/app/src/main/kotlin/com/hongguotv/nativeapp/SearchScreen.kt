@@ -13,7 +13,7 @@ import com.hongguotv.core.*
 
 /** QR form is the sole text input. Results never replace the page-owned QR session. */
 class SearchScreen(context: Context,private val state: SearchUiState,sidebar: View,load: (ImageView,String)->Unit,open: (Series)->Unit,
-    actions: (Series,View)->Unit,private val scope: (ContentType?)->Unit,private val query: (String)->Unit,history: List<RecentSearch>,private val clear: ()->Unit,reset: ()->Unit,refresh: ()->Unit,append: ()->Unit): LinearLayout(context) {
+    actions: (Series,View)->Unit,private val scope: (ContentType?)->Unit,private val query: (String)->Unit,history: List<RecentSearch>,private val clear: ()->Unit,reset: ()->Unit,refresh: ()->Unit,append: ()->Unit,private val restoreFocus: Boolean=true): LinearLayout(context) {
     private val ui=BrowseUi(context)
     private val qr=ImageView(context).apply { scaleType=ImageView.ScaleType.FIT_CENTER;setBackgroundColor(Color.WHITE);setPadding(ui.dp(4),ui.dp(4),ui.dp(4),ui.dp(4)) }
     private val connection=ui.text("正在生成二维码…",11f,TvStyle.muted).apply { gravity=Gravity.CENTER;maxLines=2 }
@@ -99,7 +99,7 @@ class SearchScreen(context: Context,private val state: SearchUiState,sidebar: Vi
         clearResults.visibility=if(searched) VISIBLE else GONE
         waitingFrame.visibility=if(searched) GONE else VISIBLE;grid.visibility=if(searched) VISIBLE else GONE
         resultTitle.text=if(searched) "“${state.query}” · ${state.scope?.label ?: "综合结果"}" else "最近搜索"
-        grid.submit(state.items.map { PosterGridView.Item(it) },if(initial) state.anchor else null)
+        grid.submit(state.items.map { PosterGridView.Item(it) },if(initial) state.anchor.copy(focus=state.anchor.focus && restoreFocus) else null)
         val message=when { state.busy->"正在搜索…";state.scope==ContentType.AI->"AI剧搜索暂不可用";state.error.isNotBlank()->state.error;!searched->"";state.items.isEmpty()->"没有匹配的剧集";state.more.values.any { it }->"已加载${state.items.size}部";else->"已显示全部结果" }
         val note=if(searched && state.scope==null && state.error.isBlank() && !state.busy) "真人剧与漫剧综合结果 · AI搜索暂不可用" else message
         status.show(note,when { state.busy || !searched || state.scope==ContentType.AI->null;state.error.isNotBlank()->"重试";state.more.values.any { it }->"继续加载";else->null })
