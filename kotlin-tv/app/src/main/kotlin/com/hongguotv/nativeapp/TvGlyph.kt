@@ -8,13 +8,19 @@ import kotlin.math.sin
 
 /** Small vector-like glyphs, drawn at the requested density without bitmap assets. */
 class TvGlyph(private var kind: Kind,private var color: Int=TvStyle.text): Drawable() {
-    enum class Kind { SEARCH, PLUS, CHECK, ARROW, SETTINGS, PHONE, HISTORY, PLAY, PAUSE, PREVIOUS, SKIP, REWIND, FORWARD, NEXT, QUALITY, SPEED, FRAME, TRANSFER, EYE, INFO, CODE }
+    enum class Kind { HOME, RANK, BOOKMARK, LAYERS, AI, SEARCH, PLUS, CHECK, ARROW, SETTINGS, PHONE, HISTORY, PLAY, PAUSE, PREVIOUS, SKIP, REWIND, FORWARD, NEXT, QUALITY, SPEED, FRAME, TRANSFER, EYE, INFO, CODE }
     private val paint=Paint(Paint.ANTI_ALIAS_FLAG).apply { style=Paint.Style.STROKE; strokeWidth=1.7f; strokeCap=Paint.Cap.ROUND; strokeJoin=Paint.Join.ROUND }
     override fun draw(canvas: Canvas) {
         val save=canvas.save(); canvas.translate(bounds.left.toFloat(),bounds.top.toFloat()); canvas.scale(bounds.width()/24f,bounds.height()/24f); paint.color=color
         fun line(x: Float,y: Float,a: Float,b: Float)=canvas.drawLine(x,y,a,b,paint)
         fun circle(x: Float,y: Float,r: Float)=canvas.drawCircle(x,y,r,paint)
         when(kind) {
+            Kind.HOME -> { val p=Path().apply { moveTo(3f,10f);lineTo(12f,2f);lineTo(21f,10f);lineTo(21f,21f);lineTo(15f,21f);lineTo(15f,14f);lineTo(9f,14f);lineTo(9f,21f);lineTo(3f,21f);close() };canvas.drawPath(p,paint) }
+            Kind.RANK -> { val p=Path().apply { moveTo(13f,2f);quadTo(23f,13f,18f,20f);quadTo(10f,27f,5f,18f);quadTo(1f,10f,8f,5f);quadTo(6f,14f,12f,14f);quadTo(16f,12f,13f,2f) };canvas.drawPath(p,paint) }
+            Kind.BOOKMARK -> { val p=Path().apply { moveTo(5f,3f);lineTo(19f,3f);lineTo(19f,22f);lineTo(12f,17f);lineTo(5f,22f);close() };canvas.drawPath(p,paint) }
+            Kind.LAYERS -> { for(y in listOf(8f,13f,18f)) { val p=Path().apply { moveTo(3f,y);lineTo(12f,y+5);lineTo(21f,y) };canvas.drawPath(p,paint) };line(3f,8f,12f,3f);line(12f,3f,21f,8f) }
+            Kind.AI -> { canvas.drawRoundRect(3f,6f,21f,21f,3f,3f,paint);line(12f,2f,12f,6f);circle(8f,12f,1f);circle(16f,12f,1f);line(8f,17f,16f,17f) }
+
             Kind.SEARCH -> { circle(10f,10f,6.5f); line(15f,15f,21f,21f) }
             Kind.PLUS -> { line(4f,12f,20f,12f); line(12f,4f,12f,20f) }
             Kind.CHECK -> { line(5f,12f,10f,17f); line(10f,17f,20f,6f) }

@@ -18,6 +18,8 @@ object TvStyle {
     val outline=Color.rgb(50,51,57)
     const val POSTER_ASPECT=2f/3f
     fun posterColumns(context: Context)=if(context.resources.configuration.fontScale>1.2f || context.resources.displayMetrics.widthPixels/context.resources.displayMetrics.density<800) 4 else 5
+    fun catalogColumns(context: Context)=if(context.resources.configuration.fontScale>1.2f) 4 else 6
+    fun homeColumns(context: Context)=if(context.resources.configuration.fontScale>1.2f) 5 else 7
     @android.annotation.SuppressLint("WrongConstant")
     fun balancePosterTitle(view: android.widget.TextView) {
         // The API 23 Layout value also works on Android 8; SDK 36's IntDef names its API 29 alias.
