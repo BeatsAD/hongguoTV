@@ -20,12 +20,17 @@ class SearchScreen(context: Context,private val state: SearchUiState,sidebar: Vi
     private val remaining=ui.text("",10f,TvStyle.muted).apply { gravity=Gravity.CENTER }
     private val resultTitle=ui.text("最近搜索",16f).apply { maxLines=2 }
     private val waiting=ui.column()
+    private val waitingFrame=FrameLayout(context)
     private val waitingScroll=TvScrollView(context).apply {
         addView(waiting);isFocusable=true;isFocusableInTouchMode=true;contentDescription="搜索历史与输入说明"
-        setOnFocusChangeListener { _,focused -> foreground=TvStyle.shape(context,Color.TRANSPARENT,if(focused) TvStyle.text else Color.TRANSPARENT,6) }
+        setOnFocusChangeListener { _,focused -> waitingFrame.foreground=TvStyle.shape(context,Color.TRANSPARENT,if(focused) TvStyle.text else Color.TRANSPARENT,6) }
     }
     private val scopeButton=BrowseButton(context,"",action={ showScopes() }).apply { tag="search:scope" }
     private val clearResults=BrowseButton(context,"清除结果",BrowseButton.Role.TEXT) { reset();scopeButton.requestFocus() }
+    private val qrScroll=TvScrollView(context)
+    private val refreshControl=BrowseButton(context,"刷新二维码") {
+        refresh();scopeButton.requestFocus();qrScroll.post { qrScroll.scrollTo(0,0) }
+    }
     val grid=PosterGridView(context,TvStyle.searchColumns(context),sidebar,load,open,actions,{ if(state.error.isBlank()) append() })
     private val status=BrowseStatus(context) { append() }
     init {
@@ -46,10 +51,16 @@ class SearchScreen(context: Context,private val state: SearchUiState,sidebar: Vi
         }
         left.addView(ui.text("手机和电视需连接同一局域网",10f,TvStyle.muted).apply { gravity=Gravity.CENTER },LayoutParams(-1,-2).apply { topMargin=ui.dp(4) })
         left.addView(remaining,LayoutParams(-1,-2).apply { topMargin=ui.dp(5) })
-        left.addView(BrowseButton(context,"刷新二维码",action=refresh),LayoutParams(-2,-2).apply { topMargin=ui.dp(9) })
-        body.addView(TvScrollView(context).apply { addView(left) },LayoutParams(ui.dp(BrowseLayout.qrPanel(TvStyle.windowDp(context)).toInt()),-1))
+        left.addView(refreshControl,LayoutParams(-2,-2).apply { topMargin=ui.dp(9) })
+        // On compact displays the refresh action starts below the QR viewport. Explicit links
+        // let the remote reach it and let ScrollView reveal it, rather than skipping the panel.
+        scopeButton.nextFocusLeftId=refreshControl.id;waitingScroll.nextFocusLeftId=refreshControl.id
+        refreshControl.nextFocusLeftId=sidebar.id;refreshControl.nextFocusRightId=scopeButton.id
+        qrScroll.addView(left)
+        body.addView(qrScroll,LayoutParams(ui.dp(BrowseLayout.qrPanel(TvStyle.windowDp(context)).toInt()),-1))
         val right=ui.column();right.addView(resultTitle,LayoutParams(-1,-2).apply { bottomMargin=ui.dp(10) })
-        right.addView(waitingScroll,LayoutParams(-1,0,1f));right.addView(grid,LayoutParams(-1,0,1f));right.addView(status,LayoutParams(-1,-2))
+        waitingFrame.addView(waitingScroll,FrameLayout.LayoutParams(-1,-1))
+        right.addView(waitingFrame,LayoutParams(-1,0,1f));right.addView(grid,LayoutParams(-1,0,1f));right.addView(status,LayoutParams(-1,-2))
         body.addView(right,LayoutParams(0,-1,1f).apply { leftMargin=ui.dp(if(compact) 14 else 20) })
         addView(body,LayoutParams(-1,0,1f));grid.bottomTarget=status.actionView;showHistory(history);update(true)
     }
@@ -86,7 +97,7 @@ class SearchScreen(context: Context,private val state: SearchUiState,sidebar: Vi
     fun update(initial: Boolean=false) {
         val searched=state.query.isNotEmpty()
         clearResults.visibility=if(searched) VISIBLE else GONE
-        waitingScroll.visibility=if(searched) GONE else VISIBLE;grid.visibility=if(searched) VISIBLE else GONE
+        waitingFrame.visibility=if(searched) GONE else VISIBLE;grid.visibility=if(searched) VISIBLE else GONE
         resultTitle.text=if(searched) "“${state.query}” · ${state.scope?.label ?: "综合结果"}" else "最近搜索"
         grid.submit(state.items.map { PosterGridView.Item(it) },if(initial) state.anchor else null)
         val message=when { state.busy->"正在搜索…";state.scope==ContentType.AI->"AI剧搜索暂不可用";state.error.isNotBlank()->state.error;!searched->"";state.items.isEmpty()->"没有匹配的剧集";state.more.values.any { it }->"已加载${state.items.size}部";else->"已显示全部结果" }
