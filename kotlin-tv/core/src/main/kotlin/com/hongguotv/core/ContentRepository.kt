@@ -28,7 +28,7 @@ data class StreamInfo(val url: String, val key: ByteArray?, val quality: String,
 }
 class SearchSessionExpiredException: IOException("搜索结果已过期，请从第 1 页重新搜索")
 
-class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectTimeout(15,TimeUnit.SECONDS).readTimeout(30,TimeUnit.SECONDS).callTimeout(45,TimeUnit.SECONDS).build(), private val clock: () -> Long = System::currentTimeMillis) {
+class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectTimeout(15,TimeUnit.SECONDS).readTimeout(30,TimeUnit.SECONDS).callTimeout(45,TimeUnit.SECONDS).build(), private val clock: () -> Long = System::currentTimeMillis, val requestGate: ContentRequestGate = ContentRequestGate()) {
     private val signer = Signer()
     private val site = "https://hongguoduanju.com"
     // Each client uses its own playback identity; the old shared identity is rejected upstream.
@@ -37,20 +37,31 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
     )
     private fun newPlayerDeviceId() = buildString { append('3'); repeat(18) { append(kotlin.random.Random.nextInt(10)) } }
     private enum class SearchSource { APP, WEBSITE }
-    private data class SearchCursor(val searchId: String, val passback: String, val offset: Int?, val updatedAt: Long, val source: SearchSource = SearchSource.APP)
+    private data class SearchCursor(val searchId: String, val passback: String, val offset: Int?, val updatedAt: Long, val source: SearchSource = SearchSource.APP, val websitePage: Int = 0)
     private val searchCursors=linkedMapOf<Triple<ContentType,String,Int>,SearchCursor>()
-    private fun text(url: String, signed: Signer.Request? = null): String {
+    @Volatile private var appSearchRetryAt = 0L
+    private fun text(url: String, signed: Signer.Request? = null, timeoutMillis: Long? = null, metadata: Boolean = true): String {
         val request = Request.Builder().url(url).header("User-Agent",VendorConstants.VIDEO_UA).header("Accept-Language","zh-CN,zh;q=0.9")
         signed?.headers?.forEach { (k,v) -> request.header(k,v) }
         signed?.body?.let { request.post(it.toRequestBody("application/json; charset=utf-8".toMediaType())) }
-        return RequestScope.execute(http.newCall(request.build())) { response ->
+        val call=http.newCall(request.build())
+        timeoutMillis?.let { call.timeout().timeout(it,TimeUnit.MILLISECONDS) }
+        requestGate.check(call.request().url.host)
+        var serverFailure=true
+        try { return RequestScope.execute(call) { response ->
+            serverFailure=response.code==408 || response.code>=500
+            requestGate.observe(call.request().url.host,response.code,response.header("Retry-After"))
             if (!response.isSuccessful) throw PlaybackSourceException(if(PlaybackErrors.retryableHttp(response.code)) PlaybackFailureKind.NETWORK else PlaybackFailureKind.SOURCE,"内容请求失败（HTTP ${response.code}）")
             val body = response.body ?: throw IOException("内容响应为空")
             if (body.contentLength() > 16*1024*1024) throw IOException("内容响应过大")
             val input=body.byteStream(); val out=java.io.ByteArrayOutputStream(); val buffer=ByteArray(8192)
             while(out.size()<=16*1024*1024) { val n=input.read(buffer); if(n<0) break; out.write(buffer,0,n) }; val bytes=out.toByteArray()
             if(bytes.size > 16*1024*1024) throw IOException("内容响应过大")
+            if(metadata) requestGate.success(call.request().url.host)
             String(bytes,Charsets.UTF_8)
+        } } catch(failure: IOException) {
+            if(metadata && serverFailure && failure !is ContentRequestDeferredException && !call.isCanceled() && !Thread.currentThread().isInterrupted) requestGate.failed(call.request().url.host)
+            throw failure
         }
     }
     private fun router(url: String) = extractRouter(text(url)).getJSONObject("loaderData")
@@ -84,12 +95,13 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
         }
         if(page>1 && cursor==null) throw SearchSessionExpiredException()
         // Keep subsequent pages on the same source: App and website page sizes differ.
-        if(cursor?.source==SearchSource.WEBSITE) return websiteSearch(keyword,page,type)
+        if(cursor?.source==SearchSource.WEBSITE || (page==1 && clock()<appSearchRetryAt)) return websiteSearch(keyword,page,type,cursor)
         try {
             val result=appSearch(keyword,page,type,cursor)
             if(result.items.isNotEmpty() || !result.hasMore || page>1) return result
         } catch (failure: Exception) {
-            if(page>1 || failure is SearchSessionExpiredException || Thread.currentThread().isInterrupted) throw failure
+            if(page>1 || failure is SearchSessionExpiredException || failure is ContentRequestDeferredException || Thread.currentThread().isInterrupted) throw failure
+            appSearchRetryAt=clock()+15*60_000L
             try { return websiteSearch(keyword,page,type) }
             catch (fallback: Exception) { if(fallback!==failure) fallback.addSuppressed(failure); throw fallback }
         }
@@ -101,19 +113,32 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
             while(searchCursors.size>100) searchCursors.remove(searchCursors.keys.first())
         }
     }
-    private fun websiteSearch(keyword: String, page: Int, type: ContentType): CatalogPage {
+    private fun websiteSearch(keyword: String, page: Int, type: ContentType, cursor: SearchCursor? = null): CatalogPage {
         // The current search page renders client-side. Use its JSON result endpoint and
         // require the explicit genre; never substitute mixed results for a typed search.
-        val payload=text("$site/api/search/result?query=${Signer.encode(keyword)}"+if(page>1) "&page=$page" else "")
-        val data=try { JSONObject(payload) } catch (failure: org.json.JSONException) { throw IOException("搜索返回格式异常，请稍后重试",failure) }
-        val rows=data.optJSONArray("searchList") ?: throw IOException("搜索数据暂不可用，请稍后重试")
-        if(data.optInt("pageNum",-1)!=page) throw IOException("搜索页码不匹配，请重新搜索")
-        val totalPages=data.optInt("totalPages",-1)
-        if(totalPages<0 || !data.has("hasMore")) throw IOException("搜索分页数据异常，请稍后重试")
-        val genre=if(type==ContentType.COMIC) "205" else "203"
-        val items=valid(rows.objects().filter { it.optInt("doc_type")==23 && it.optJSONObject("video_data")?.str("genre")==genre }.map(::card))
-        rememberSearchPage(keyword,page,type,SearchCursor("","",null,clock(),SearchSource.WEBSITE))
-        return CatalogPage(items,data.optBoolean("hasMore",false) && page<minOf(totalPages,100))
+        var sourcePage=if(page==1) 1 else (cursor?.websitePage ?: throw SearchSessionExpiredException())+1
+        val deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(12)
+        // A typed page may be empty after filtering mixed website results. Scan at most
+        // four source pages; keep the logical cursor at the last consumed source page.
+        repeat(4) {
+            val remaining=TimeUnit.NANOSECONDS.toMillis(deadline-System.nanoTime())
+            if(remaining<=0) throw IOException("搜索超时，请稍后重试")
+            val payload=text("$site/api/search/result?query=${Signer.encode(keyword)}"+if(sourcePage>1) "&page=$sourcePage" else "",timeoutMillis=remaining)
+            val data=try { JSONObject(payload) } catch (failure: org.json.JSONException) { throw IOException("搜索返回格式异常，请稍后重试",failure) }
+            val rows=data.optJSONArray("searchList") ?: throw IOException("搜索数据暂不可用，请稍后重试")
+            if(data.optInt("pageNum",-1)!=sourcePage) throw IOException("搜索页码不匹配，请重新搜索")
+            val totalPages=data.optInt("totalPages",-1)
+            if(totalPages<0 || !data.has("hasMore")) throw IOException("搜索分页数据异常，请稍后重试")
+            val genre=if(type==ContentType.COMIC) "205" else "203"
+            val items=valid(rows.objects().filter { it.optInt("doc_type")==23 && it.optJSONObject("video_data")?.str("genre")==genre }.map(::card))
+            val more=data.optBoolean("hasMore",false) && sourcePage<minOf(totalPages,100)
+            if(items.isNotEmpty() || !more || it==3) {
+                rememberSearchPage(keyword,page,type,SearchCursor("","",null,clock(),SearchSource.WEBSITE,sourcePage))
+                return CatalogPage(items,more && page<100)
+            }
+            sourcePage++
+        }
+        error("Unreachable search page")
     }
     private fun appSearch(keyword: String, page: Int, type: ContentType, cursor: SearchCursor?): CatalogPage {
         val values=VendorConstants.device.toMutableMap()
@@ -126,7 +151,7 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
             it.offset?.takeIf { offset -> offset>=0 }?.let { offset -> values["offset"]=offset.toString() }
         }
         val signed=signer.sign("https://api5-normal-sinfonlinea.fqnovel.com/reading/bookapi/search/tab/v",values)
-        val payload=text(signed.url,signed)
+        val payload=text(signed.url,signed,timeoutMillis=5_000)
         if(payload.isBlank()) throw IOException("搜索接口未返回数据，请稍后重试")
         val data=try { JSONObject(payload) } catch (failure: org.json.JSONException) { throw IOException("搜索返回格式异常，请稍后重试",failure) }
         if(data.optInt("code",-1)!=0) throw IOException("搜索接口暂不可用")
@@ -165,7 +190,7 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
             "User-Agent" to "com.phoenix.read/71532 (Linux; U; Android 9; SM-N9860; Build/PQ3A.190705.10241111;tt-ok/3.12.13.20)",
             "Accept" to "application/json; charset=utf-8,application/x-protobuf"
         ),payload)
-        val response=text(playerUrl,request)
+        val response=text(playerUrl,request,metadata=false)
         if(response.isBlank()) throw PlaybackSourceException(PlaybackFailureKind.SOURCE,"播放接口返回空响应，请稍后重试或更新应用")
         val data=try { JSONObject(response) } catch(_: Exception) { throw PlaybackSourceException(PlaybackFailureKind.FORMAT,"播放信息格式已变化，请更新应用") }
         val code=data.optInt("Code",data.optInt("code",0))
@@ -188,7 +213,7 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
         val raw=model.opt("fallback_api") ?: throw PlaybackSourceException(PlaybackFailureKind.UNSUPPORTED,"没有电视可播放的清晰度，请稍后再试或选择其他剧集")
         val fallback=when(raw) { is JSONObject -> raw.str("fallback_api"); is JSONArray -> raw.optString(0); else -> runCatching { JSONObject(raw.toString()).str("fallback_api") }.getOrDefault(raw.toString()) }
         if(!fallback.startsWith("https://")) throw PlaybackSourceException(PlaybackFailureKind.FORMAT,"播放地址格式异常")
-        val info=try { JSONObject(text(fallback)).optJSONObject("video_info")?.optJSONObject("data") } catch(e: IOException) { throw e } catch(_: Exception) { throw PlaybackSourceException(PlaybackFailureKind.FORMAT,"播放信息格式已变化，请更新应用") }
+        val info=try { JSONObject(text(fallback,metadata=false)).optJSONObject("video_info")?.optJSONObject("data") } catch(e: IOException) { throw e } catch(_: Exception) { throw PlaybackSourceException(PlaybackFailureKind.FORMAT,"播放信息格式已变化，请更新应用") }
             ?: throw PlaybackSourceException(PlaybackFailureKind.FORMAT,"没有播放资源")
         val videoList=info.optJSONObject("video_list") ?: throw PlaybackSourceException(PlaybackFailureKind.UNSUPPORTED,"没有可用清晰度")
         // ByteVC2 resources can expose playable audio but no video track in Android's MP4 extractor.

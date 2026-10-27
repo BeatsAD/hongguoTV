@@ -5,6 +5,7 @@ import android.os.Handler
 import android.os.Looper
 import com.hongguotv.core.ContentRepository
 import com.hongguotv.core.RequestScope
+import com.hongguotv.core.ContentRequestDeferredException
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
@@ -19,7 +20,8 @@ class FavoriteMonitor(private val library: Library, source: ContentRepository, p
     private var destroyed = false
     private val http = source.http.newBuilder().callTimeout(12, TimeUnit.SECONDS)
         .build()
-    private val repository = ContentRepository(http)
+    private val repository = ContentRepository(http,requestGate=source.requestGate)
+    private var nextCheckAt=0L
     var running = false; private set
     var status = "进入收藏可手动检查更新"; private set
     var lastChangedId: String? = null; private set
@@ -27,23 +29,29 @@ class FavoriteMonitor(private val library: Library, source: ContentRepository, p
     fun check(force: Boolean = false) {
         if (running || destroyed || !library.isLoaded) return
         val now = System.currentTimeMillis()
+        if(now<nextCheckAt) {
+            status="已检查过，稍后可再检查"; changed(); return
+        }
         val favorites = library.favorites()
-        val items = favorites.filter { force || library.favoriteUpdate(it.id)?.let { now - it.checkedAt !in 0 until 3_600_000L } != false }
+        val eligible=favorites.filter { force || library.favoriteUpdate(it.id)?.let { now - it.checkedAt !in 0 until 6*3_600_000L } != false }
+            .sortedBy { library.favoriteUpdate(it.id)?.checkedAt ?: 0 }
+        val items=eligible.take(10)
         lastChangedId = null
         if (items.isEmpty()) {
-            status = if (favorites.isEmpty()) "收藏后可检查新集" else "最近一小时已检查，可手动刷新"
+            status = if (favorites.isEmpty()) "收藏后可检查新集" else "最近已检查，可手动刷新"
             changed(); return
         }
         val ticket = ++epoch
         val owned = RequestScope()
         scope = owned
         running = true
+        nextCheckAt=now+60_000L
         var completed = 0; var failures = 0; var consecutiveFailures = 0
         fun next() {
             if (ticket != epoch) return
             if (completed == items.size || consecutiveFailures >= 3) {
                 running = false
-                status = "已检查 $completed/${items.size} 部" + (if (failures > 0) " · $failures 部失败，稍后可重试" else " · 检查完成")
+                status = "本批已检查 $completed/${items.size} 部" + (if (failures > 0) " · $failures 部失败，稍后可重试" else if(eligible.size>items.size) " · 还有收藏待检查" else " · 检查完成")
                 changed(); return
             }
             val item = items[completed]
@@ -53,17 +61,25 @@ class FavoriteMonitor(private val library: Library, source: ContentRepository, p
             lastChangedId = null
             job = worker.submit {
                 if (ticket != epoch) return@submit
-                val result = runCatching { owned.run { repository.detail(item.id).episodes.size } }
+                val result = runCatching { owned.run { repository.detail(item.id) } }
                 main.post {
                     if (ticket != epoch) return@post
                     job = null
-                    result.onSuccess { count ->
-                        library.observeFavorite(item.id, count, started)
+                    result.onSuccess { detail ->
+                        library.observeDetail(detail, started)
                         lastChangedId = item.id
                         consecutiveFailures = 0
-                    }.onFailure { failures++; consecutiveFailures++ }
+                    }.onFailure {
+                        failures++; consecutiveFailures++
+                        nextCheckAt=maxOf(nextCheckAt,System.currentTimeMillis()+5*60_000L)
+                        if(it is ContentRequestDeferredException) {
+                            nextCheckAt=maxOf(nextCheckAt,System.currentTimeMillis()+it.retryAfterMillis)
+                            consecutiveFailures=3
+                        }
+                    }
                     completed++
-                    next()
+                    if(completed==items.size || consecutiveFailures>=3) next()
+                    else main.postDelayed({ if(ticket==epoch) next() },2_000L)
                 }
             }
         }

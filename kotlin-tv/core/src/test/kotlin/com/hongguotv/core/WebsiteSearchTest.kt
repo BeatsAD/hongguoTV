@@ -12,11 +12,11 @@ import org.junit.Test
 import java.io.IOException
 
 class WebsiteSearchTest {
-    private fun repository(clock: () -> Long = System::currentTimeMillis, respond: (Request) -> String) = ContentRepository(
+    private fun repository(clock: () -> Long = System::currentTimeMillis, gate: ContentRequestGate = ContentRequestGate(clock), respond: (Request) -> String) = ContentRepository(
         OkHttpClient.Builder().addInterceptor { chain ->
             Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("OK")
                 .body(respond(chain.request()).toResponseBody()).build()
-        }.build(),clock
+        }.build(),clock,gate
     )
     private fun card(id: String, genre: String, docType: Int = 23) = JSONObject().put("doc_type",docType)
         .put("video_data",JSONObject().put("series_id",id).put("series_title","测试剧集$id").put("genre",genre).put("episode_cnt",12))
@@ -75,8 +75,8 @@ class WebsiteSearchTest {
     }
 
     @Test fun restartingSearchCanReturnToHealthyAppAndUseItsCursor() {
-        var appCalls=0; var webCalls=0
-        val repo=repository { request ->
+        var appCalls=0; var webCalls=0; var now=0L
+        val repo=repository(clock={now}) { request ->
             if(request.url.encodedPath=="/api/search/result") { webCalls++; page(1,true,card("101","205")) }
             else {
                 appCalls++
@@ -87,6 +87,7 @@ class WebsiteSearchTest {
             }
         }
         repo.search("逆江湖",type=ContentType.COMIC)
+        now=900_001L
         assertEquals("201",repo.search("逆江湖",type=ContentType.COMIC).items.single().id)
         repo.search("逆江湖",2,ContentType.COMIC)
         assertEquals(3,appCalls); assertEquals(1,webCalls)
@@ -117,10 +118,69 @@ class WebsiteSearchTest {
         }
     }
 
-    @Test fun validEmptyPageKeepsServerPaginationAfterFilteringOtherTypes() {
-        var calls=0
-        val repo=repository { calls++; if(calls==1) "" else page(1,true,card("101","203")) }
+    @Test fun emptyTypedPagesHaveBoundedScanAndKeepContinuation() {
+        val pages=mutableListOf<Int>()
+        val repo=repository { request ->
+            if(request.url.encodedPath!="/api/search/result") "" else {
+                val number=request.url.queryParameter("page")?.toInt() ?: 1; pages+=number
+                page(number,true,card("101","203"))
+            }
+        }
         val result=repo.search("逆江湖",type=ContentType.COMIC)
         assertTrue(result.items.isEmpty()); assertTrue(result.hasMore)
+        assertEquals(listOf(1,2,3,4),pages)
+        repo.search("逆江湖",2,ContentType.COMIC)
+        assertEquals((1..8).toList(),pages)
+    }
+
+    @Test fun skippingFilteredPagesDoesNotSkipOrReplayNextLogicalPage() {
+        val pages=mutableListOf<Int>()
+        val repo=repository { request ->
+            if(request.url.encodedPath!="/api/search/result") "" else {
+                val number=request.url.queryParameter("page")?.toInt() ?: 1; pages+=number
+                page(number,number<4,card("$number",if(number<3) "205" else "203"))
+            }
+        }
+        assertEquals(listOf("3"),repo.search("总裁",type=ContentType.SHORT).items.map { it.id })
+        val next=repo.search("总裁",2,ContentType.SHORT)
+        assertEquals(listOf("4"),next.items.map { it.id }); assertFalse(next.hasMore)
+        assertEquals(listOf(1,2,3,4),pages)
+        assertEquals(listOf("4"),repo.search("总裁",2,ContentType.SHORT).items.map { it.id })
+    }
+
+    @Test fun failedSkippedPageCanBeRetriedWithoutAdvancingLogicalCursor() {
+        var fail=true; var networkClock=0L
+        val repo=repository(clock={0L},gate=ContentRequestGate {networkClock}) { request ->
+            if(request.url.encodedPath!="/api/search/result") "" else {
+                val number=request.url.queryParameter("page")?.toInt() ?: 1
+                if(number==3 && fail) throw IOException("offline")
+                page(number,number<3,card("$number",if(number==2) "205" else "203"))
+            }
+        }
+        repo.search("总裁",type=ContentType.SHORT)
+        assertThrows(IOException::class.java) { repo.search("总裁",2,ContentType.SHORT) }
+        fail=false; networkClock=300_001L
+        assertEquals("3",repo.search("总裁",2,ContentType.SHORT).items.single().id)
+    }
+
+    @Test fun unavailablePrimaryIsNotRetriedForEveryQueryDuringCooldown() {
+        var appCalls=0
+        val repo=repository(clock={10L}) { request ->
+            if(request.url.encodedPath!="/api/search/result") { appCalls++; "" }
+            else page(1,false,card("1","203"))
+        }
+        repo.search("总裁",type=ContentType.SHORT)
+        repo.search("保姆",type=ContentType.SHORT)
+        assertEquals(1,appCalls)
+    }
+
+    @Test fun scanStopsAtSourceEndEvenWithoutRequestedType() {
+        var calls=0
+        val repo=repository { request ->
+            calls++
+            if(request.url.encodedPath!="/api/search/result") "" else page(1,false,card("1","205"))
+        }
+        val result=repo.search("总裁",type=ContentType.SHORT)
+        assertTrue(result.items.isEmpty()); assertFalse(result.hasMore); assertEquals(2,calls)
     }
 }

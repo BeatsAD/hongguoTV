@@ -124,7 +124,7 @@ class Library(context: Context,private val saveState: (SaveState)->Unit = {}) {
     fun favoriteUpdate(id: String) = state().favoriteUpdate(id)
     fun updatedFavorites() = state().updatedFavorites()
     fun favoriteLabel(id: String): String = favoriteUpdate(id)?.let {
-        if (it.added > 0) "新增 ${it.added} 集 · 更新至 ${it.total} 集" else "更新至 ${it.total} 集"
+        if (it.added > 0) "新增 ${it.added} 集 · 更新至 ${it.total} 集" else if(it.contentChanged) "分集有调整 · 共 ${it.total} 集" else "更新至 ${it.total} 集"
     } ?: "尚未检查更新"
     fun toggle(series: Series) = state().toggle(series).also { persist("favorites", "favoriteUpdates") }
     fun toggleLater(series: Series) = state().toggleLater(series).also { persist("later") }
@@ -139,11 +139,16 @@ class Library(context: Context,private val saveState: (SaveState)->Unit = {}) {
     fun observeFavorite(id: String, count: Int, now: Long, acknowledge: Boolean = false) {
         if (state().observeFavorite(id, count, now, acknowledge)) persist("favoriteUpdates")
     }
+    fun observeDetail(detail: Detail, now: Long, acknowledge: Boolean=false) {
+        val keys=state().observeDetail(detail,now,acknowledge)
+        if(keys.isNotEmpty()) persist(*keys.toTypedArray())
+    }
     fun cachedHome(type: ContentType): CatalogPage? {
         state()
         val age = System.currentTimeMillis() - (homeSavedAt[type] ?: return null)
         return homes[type].takeIf { age in 0..7 * 24 * 60 * 60 * 1000L }
     }
+    fun cachedHomeAge(type: ContentType): Long? = homeSavedAt[type]?.let { (System.currentTimeMillis()-it).coerceAtLeast(0) }
     fun cacheHome(type: ContentType, items: List<Series>, hasMore: Boolean) {
         state()
         if (items.isEmpty()) return

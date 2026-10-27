@@ -5,6 +5,24 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class WatchingTest {
+    @Test fun liveListUpdatesFollowCurrentEpisodeAndDeferRemovalUntilPlaybackEnds() {
+        assertEquals(2,ResumePlayback.refreshedIndex(listOf("new","10","20","30"),"20",1,true))
+        assertNull(ResumePlayback.refreshedIndex(listOf("10","30"),"20",1,true))
+        assertEquals(1,ResumePlayback.refreshedIndex(listOf("10","30"),"20",10,false))
+        assertEquals(0,ResumePlayback.refreshedIndex(listOf("10","20","30"),"10",0,true))
+    }
+    @Test fun episodeReplacementIsVisibleEvenWhenCountDoesNotGrow() {
+        val first=FavoriteUpdate.first(2,1,FavoriteUpdate.fingerprint(listOf("10","20")))
+        val replaced=first.observe(2,2,fingerprint=FavoriteUpdate.fingerprint(listOf("10","30")))
+        assertEquals(0,replaced.added); assertTrue(replaced.contentChanged); assertTrue(replaced.hasChanges)
+        assertEquals(replaced,FavoriteUpdate.decode(replaced.json()))
+        assertFalse(replaced.observe(2,3,acknowledge=true).hasChanges)
+        assertEquals(replaced,replaced.observe(3,0,fingerprint="stale"))
+    }
+    @Test fun existingCountOnlyRecordsEstablishFingerprintWithoutFalseNotification() {
+        val old=FavoriteUpdate.decode(JSONObject("""{"total":2,"seen":2,"checkedAt":1}"""))!!
+        assertFalse(old.observe(2,2,fingerprint=FavoriteUpdate.fingerprint(listOf("10","20"))).hasChanges)
+    }
     @Test fun `favorite baseline is quiet and multiple checks accumulate unread episodes`() {
         val first=FavoriteUpdate.first(80,100)
         assertEquals(0,first.added)

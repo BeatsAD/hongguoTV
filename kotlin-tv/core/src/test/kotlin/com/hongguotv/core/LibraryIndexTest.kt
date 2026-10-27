@@ -4,6 +4,25 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class LibraryIndexTest {
+    @Test fun detailRefreshUpdatesMetadataWithoutReorderingOrMovingPlayback() {
+        val state=LibraryIndex(data())
+        val original=state.progress("3")!!
+        val fresh=series(3).copy(title="新剧名",cover="https://example.com/new.jpg")
+        val keys=state.observeDetail(Detail(fresh,listOf("10","20")),100)
+        assertEquals(setOf("favorites","later","progress","favoriteUpdates"),keys)
+        assertEquals((1..500).map(Int::toString),state.favorites().map { it.id })
+        assertEquals(original.copy(series=fresh),state.progress("3"))
+        assertEquals(fresh,state.later().single())
+        assertEquals(fresh,state.favorites()[2])
+        val replacement=Detail(fresh,listOf("10","30"))
+        state.observeDetail(replacement,101)
+        assertTrue(state.favoriteUpdate("3")!!.contentChanged)
+        assertEquals(1,state.updatedFavorites())
+        assertTrue(state.observeDetail(Detail(series(3),listOf("10")),99).isEmpty())
+        assertEquals(fresh,state.favorites()[2])
+        state.observeDetail(replacement,102,acknowledge=true)
+        assertEquals(0,state.updatedFavorites())
+    }
     private fun series(id: Int) = Series("$id", "剧 $id", "https://example.com/$id.jpg", "完整本机简介", "全 80 集", "剧情")
     private fun progress(id: Int, position: Long = 100, updated: Long = id.toLong()) =
         BackupProgress(series(id), "${id + 1000}", 2, position, 60_000, false, updated)

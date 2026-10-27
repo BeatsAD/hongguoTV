@@ -16,7 +16,7 @@ class LibraryIndex(data: BackupData, updates: Map<String, FavoriteUpdate> = empt
     private var hiddenIds = data.hidden.take(500).toSet()
     private var searchRows = data.searches.take(20)
     private var updateRows = updates.filterKeys { it in favoriteIds }
-    private var updateCount = updateRows.values.count { it.added > 0 }
+    private var updateCount = updateRows.values.count { it.hasChanges }
     var settings = data.settings
 
     fun favorites() = favoriteRows
@@ -38,7 +38,7 @@ class LibraryIndex(data: BackupData, updates: Map<String, FavoriteUpdate> = empt
         favoriteRows = (if (added) listOf(series) + favoriteRows else favoriteRows.filterNot { it.id == series.id }).take(500)
         favoriteIds = favoriteRows.map { it.id }.toSet()
         updateRows = updateRows.filterKeys { it in favoriteIds }
-        updateCount = updateRows.values.count { it.added > 0 }
+        updateCount = updateRows.values.count { it.hasChanges }
         return added
     }
     fun toggleLater(series: Series): Boolean {
@@ -71,14 +71,32 @@ class LibraryIndex(data: BackupData, updates: Map<String, FavoriteUpdate> = empt
         watchedIds = watchedIds - id
     }
     fun clearHistory() { historyRows = emptyList(); progressById.clear(); watchedIds = emptySet() }
-    fun observeFavorite(id: String, count: Int, now: Long, acknowledge: Boolean): Boolean {
+    fun observeFavorite(id: String, count: Int, now: Long, acknowledge: Boolean, fingerprint: String?=null): Boolean {
         if (!favorite(id)) return false
         val previous = updateRows[id]
-        val next = previous?.observe(count, now, acknowledge) ?: FavoriteUpdate.first(count, now)
+        val next = previous?.observe(count, now, acknowledge, fingerprint ?: previous.fingerprint) ?: FavoriteUpdate.first(count, now, fingerprint.orEmpty())
         if (previous == next) return false
         updateRows = updateRows + (id to next)
-        updateCount += (if (next.added > 0) 1 else 0) - (if ((previous?.added ?: 0) > 0) 1 else 0)
+        updateCount += (if (next.hasChanges) 1 else 0) - (if (previous?.hasChanges==true) 1 else 0)
         return true
+    }
+    /** Update display metadata without moving records or changing viewing timestamps. */
+    fun observeDetail(detail: Detail, now: Long, acknowledge: Boolean=false): Set<String> {
+        val series=detail.series
+        if(updateRows[series.id]?.checkedAt?.let { it>now }==true) return emptySet()
+        val changed=linkedSetOf<String>()
+        if(favoriteRows.any { it.id==series.id && it!=series }) {
+            favoriteRows=favoriteRows.map { if(it.id==series.id) series else it }; changed+="favorites"
+        }
+        if(laterRows.any { it.id==series.id && it!=series }) {
+            laterRows=laterRows.map { if(it.id==series.id) series else it }; changed+="later"
+        }
+        if(progressById[series.id]?.series?.let { it!=series }==true) {
+            historyRows=historyRows.map { if(it.series.id==series.id) it.copy(series=series) else it }
+            progressById[series.id]=historyRows.first { it.series.id==series.id }; changed+="progress"
+        }
+        if(observeFavorite(series.id,detail.episodes.size,now,acknowledge,FavoriteUpdate.fingerprint(detail.episodes))) changed+="favoriteUpdates"
+        return changed
     }
     fun snapshot() = BackupData(favoriteRows, historyRows, watchedIds, searchRows, settings, laterRows, hiddenIds)
 }
