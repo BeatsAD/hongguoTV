@@ -66,10 +66,10 @@ class HomeScreen(context: Context,private val top: View,private val loadCover: (
                 val current=cards.indexOfFirst { it.hasFocus() }.takeIf { it>=0 } ?: (horizontal.scrollX/(cards.firstOrNull()?.width?.plus(ui.dp(12)) ?: 1).coerceAtLeast(1))
                 cards.getOrNull((current+direction*count).coerceIn(0,(cards.size-1).coerceAtLeast(0)))?.requestFocus()
             }
-            val previous=BrowseButton(context,"‹",BrowseButton.Role.TEXT) { page(-1) }.apply { tag="${shelf.key}:previous";contentDescription="上一屏${shelf.title}" }
-            val next=BrowseButton(context,"›",BrowseButton.Role.TEXT) { page(1) }.apply { tag="${shelf.key}:next";contentDescription="下一屏${shelf.title}" }
+            val previous=BrowseButton(context,"",BrowseButton.Role.TEXT) { page(-1) }.leadingIcon(TvGlyph.Kind.BACK).apply { tag="${shelf.key}:previous";contentDescription="上一屏${shelf.title}";minimumWidth=ui.dp(29) }
+            val next=BrowseButton(context,"",BrowseButton.Role.TEXT) { page(1) }.leadingIcon(TvGlyph.Kind.NEXT).apply { tag="${shelf.key}:next";contentDescription="下一屏${shelf.title}";minimumWidth=ui.dp(29) }
             heading.addView(indicator);heading.addView(previous);heading.addView(next)
-            val all=BrowseButton(context,if(shelf.key=="resume") "全部记录 ›" else "全部${shelf.title} ›",BrowseButton.Role.TEXT) { shelf.more?.invoke() }.apply { tag="${shelf.key}:all";textSize=12f }
+            val all=BrowseButton(context,if(shelf.key=="resume") "全部记录" else "全部${shelf.title}",BrowseButton.Role.TEXT) { shelf.more?.invoke() }.trailingIcon(TvGlyph.Kind.NEXT).apply { tag="${shelf.key}:all";textSize=12f }
             heading.addView(all,LayoutParams(-2,-2).apply { leftMargin=ui.dp(16) })
             block.addView(heading,LayoutParams(-1,-2).apply { bottomMargin=ui.dp(6) })
             val status=ui.text(shelf.status,11f,TvStyle.muted).apply { visibility=if(shelf.status.isBlank()) GONE else VISIBLE }

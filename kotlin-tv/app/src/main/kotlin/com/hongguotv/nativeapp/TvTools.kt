@@ -116,9 +116,11 @@ class TvTools(private val activity: Activity) {
         buttons.first().requestFocus()
     }
     private fun qr(url: String)=ImageView(activity).apply {
+        scaleType=ImageView.ScaleType.FIT_CENTER
         val bits=QRCodeWriter().encode(url,BarcodeFormat.QR_CODE,360,360)
         val pixels=IntArray(360*360) { i->if(bits[i%360,i/360]) Color.BLACK else Color.WHITE }
         setImageBitmap(Bitmap.createBitmap(pixels,360,360,Bitmap.Config.ARGB_8888))
+        (drawable as? android.graphics.drawable.BitmapDrawable)?.isFilterBitmap=false
         contentDescription="二维码"
     }
     fun phoneInput(anchor: View?,submit: (String)->Unit) {

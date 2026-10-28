@@ -8,7 +8,7 @@ import kotlin.math.sin
 
 /** Small vector-like glyphs, drawn at the requested density without bitmap assets. */
 class TvGlyph(private var kind: Kind,private var color: Int=TvStyle.text,private val filled: Boolean=false): Drawable() {
-    enum class Kind { HOME, RANK, BOOKMARK, LAYERS, AI, SEARCH, PLUS, CHECK, ARROW, SETTINGS, PHONE, HISTORY, PLAY, PAUSE, PREVIOUS, SKIP, REWIND, FORWARD, NEXT, QUALITY, SPEED, FRAME, FILM, TRANSFER, EYE, INFO, CODE }
+    enum class Kind { HOME, RANK, BOOKMARK, LAYERS, AI, SEARCH, PLUS, CHECK, ARROW, SETTINGS, PHONE, HISTORY, PLAY, PAUSE, PREVIOUS, SKIP, REWIND, FORWARD, NEXT, BACK, UP, DOWN, CLOSE, QUALITY, SPEED, FRAME, FILM, TRANSFER, EYE, INFO, CODE }
     private val paint=Paint(Paint.ANTI_ALIAS_FLAG).apply { style=Paint.Style.STROKE; strokeWidth=1.7f; strokeCap=Paint.Cap.ROUND; strokeJoin=Paint.Join.ROUND }
     override fun draw(canvas: Canvas) {
         val scale=minOf(bounds.width(),bounds.height())/24f
@@ -37,6 +37,10 @@ class TvGlyph(private var kind: Kind,private var color: Int=TvStyle.text,private
             Kind.PREVIOUS,Kind.SKIP -> { val previous=kind==Kind.PREVIOUS; if(previous) { canvas.save(); canvas.rotate(180f,12f,12f) }; val p=Path().apply { moveTo(5f,5f); lineTo(16f,12f); lineTo(5f,19f); close() }; canvas.drawPath(p,paint); line(19f,5f,19f,19f); if(previous) canvas.restore() }
             Kind.REWIND,Kind.FORWARD -> { val forward=kind==Kind.FORWARD; if(forward) { canvas.save(); canvas.rotate(180f,12f,12f) }; canvas.drawArc(4f,4f,20f,20f,210f,280f,false,paint); line(3f,5f,4f,12f); line(4f,12f,11f,10f); if(forward) canvas.restore() }
             Kind.NEXT -> { line(9f,5f,16f,12f); line(16f,12f,9f,19f) }
+            Kind.BACK -> { line(15f,5f,8f,12f);line(8f,12f,15f,19f) }
+            Kind.UP -> { line(5f,15f,12f,8f);line(12f,8f,19f,15f) }
+            Kind.DOWN -> { line(5f,9f,12f,16f);line(12f,16f,19f,9f) }
+            Kind.CLOSE -> { line(6f,6f,18f,18f);line(6f,18f,18f,6f) }
             Kind.QUALITY -> { canvas.drawRoundRect(3f,4f,21f,17f,2f,2f,paint);line(12f,17f,12f,21f);line(8f,21f,16f,21f) }
             Kind.FRAME -> { canvas.drawRoundRect(3f,5f,21f,19f,2f,2f,paint);line(8f,9f,8f,15f);line(16f,9f,16f,15f) }
             Kind.FILM -> { canvas.drawRoundRect(2f,4f,22f,20f,1f,1f,paint);line(7f,4f,7f,20f);line(17f,4f,17f,20f);for(y in listOf(8f,12f,16f)) { line(2f,y,7f,y);line(17f,y,22f,y) } }

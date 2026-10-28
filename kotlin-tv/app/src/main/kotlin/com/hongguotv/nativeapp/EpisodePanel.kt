@@ -20,10 +20,14 @@ class EpisodePanel(
     private var focused=current
     private fun dp(n: Int)=(n*activity.resources.displayMetrics.density).toInt()
     private fun label(value: String,size: Float=17f)=TextView(activity).apply { text=value; textSize=size; setTextColor(TvStyle.text); setPadding(dp(8),dp(6),dp(8),dp(6)) }
-    private fun button(value: String,active: Boolean=false,action: ()->Unit)=label(value,16f).apply {
+    private fun button(value: String,active: Boolean=false,icon: TvGlyph.Kind?=null,atEnd: Boolean=false,action: ()->Unit)=label(value,16f).apply {
         id=View.generateViewId(); gravity=Gravity.CENTER; minHeight=dp(46); isFocusable=true; isFocusableInTouchMode=true
         fun paint(focus: Boolean) { setTextColor(if(active) TvStyle.background else TvStyle.text); background=if(active && focus) TvStyle.focused(activity,TvStyle.text,8) else TvStyle.shape(activity,if(active) TvStyle.text else if(focus) TvStyle.raised else TvStyle.background,if(focus) TvStyle.text else Color.TRANSPARENT,8) }
         paint(false); setOnFocusChangeListener { _,hasFocus -> paint(hasFocus) }; setOnClickListener { action() }
+        icon?.let { kind ->
+            val glyph=TvGlyph(kind).apply { setBounds(0,0,dp(16),dp(16)) }
+            setCompoundDrawables(if(atEnd) null else glyph,null,if(atEnd) glyph else null,null);compoundDrawablePadding=dp(if(value.isEmpty()) 0 else 5)
+        }
     }
     fun show() {
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
@@ -40,7 +44,7 @@ class EpisodePanel(
     private fun render() {
         val content=LinearLayout(activity).apply { orientation=LinearLayout.VERTICAL; setPadding(dp(20),dp(22),dp(20),dp(22)); background=TvStyle.shape(activity,TvStyle.surface,radius=20) }
         val header=LinearLayout(activity).apply { gravity=Gravity.CENTER_VERTICAL }
-        val close=button("×") { dismiss() }.apply { contentDescription="关闭选集"; textSize=23f }
+        val close=button("",icon=TvGlyph.Kind.CLOSE) { dismiss() }.apply { contentDescription="关闭选集" }
         header.addView(label("选集",21f),LinearLayout.LayoutParams(0,-2,1f)); header.addView(close,LinearLayout.LayoutParams(dp(36),dp(38)))
         content.addView(header); content.addView(label("正在看第 ${current+1} 集",12f))
         val actions=LinearLayout(activity).apply { gravity=Gravity.END }
@@ -49,8 +53,8 @@ class EpisodePanel(
         actions.addView(jump,LinearLayout.LayoutParams(-2,-2).apply { setMargins(dp(3),dp(10),dp(3),dp(8)) })
         content.addView(actions)
         val paging=LinearLayout(activity)
-        val previous=button("‹ 上一组") { group--; focused=group*20; render() }.apply { isEnabled=group>0; isFocusable=isEnabled; alpha=if(isEnabled) 1f else .4f }
-        val next=button("下一组 ›") { group++; focused=group*20; render() }.apply { isEnabled=(group+1)*20<count; isFocusable=isEnabled; alpha=if(isEnabled) 1f else .4f }
+        val previous=button("上一组",icon=TvGlyph.Kind.BACK) { group--; focused=group*20; render() }.apply { isEnabled=group>0; isFocusable=isEnabled; alpha=if(isEnabled) 1f else .4f }
+        val next=button("下一组",icon=TvGlyph.Kind.NEXT,atEnd=true) { group++; focused=group*20; render() }.apply { isEnabled=(group+1)*20<count; isFocusable=isEnabled; alpha=if(isEnabled) 1f else .4f }
         listOf(previous,next).forEach { paging.addView(it,LinearLayout.LayoutParams(0,-2,1f).apply { setMargins(dp(3),dp(3),dp(3),dp(3)) }) }
         content.addView(paging)
         content.addView(label("第 ${group*20+1}—${minOf((group+1)*20,count)} 集 / 共 $count 集",14f))

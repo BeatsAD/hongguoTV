@@ -24,18 +24,18 @@ class CatalogScreen(context: Context,private val state: CatalogUiState,sidebar: 
         controls.removeAllViews()
         val theme=state.dimensions.firstOrNull { it.id=="category_dim_theme" }
         val options=mutableListOf<View>()
-        if(theme!=null) {
+        if(theme!=null && !state.expanded) {
             options+=BrowseButton(context,"全部",BrowseButton.Role.FILTER,state.query.selections[theme.id].isNullOrEmpty()) { change(state.query.choose(theme,null)) }.apply { tag="theme:all";if(!theme.multiple) autoSelect(RemoteFocus.NETWORK_DELAY) }
             val chosen=state.query.selections[theme.id].orEmpty()
             theme.options.filterIndexed { index,item -> index<6 || item.id in chosen }.forEach { option -> options+=BrowseButton(context,option.label,BrowseButton.Role.FILTER,option.id in chosen) { change(state.query.choose(theme,option.id)) }.apply { tag="theme:${option.id}";if(!theme.multiple) autoSelect(RemoteFocus.NETWORK_DELAY) } }
         }
-        val more=BrowseButton(context,if(state.expanded) "收起 ▴" else "更多 ▾",BrowseButton.Role.FILTER,state.expanded) { state.expanded=!state.expanded;renderControls();controls.findViewWithTag<View>("more")?.requestFocus() }.apply { tag="more" }
+        val more=BrowseButton(context,if(state.expanded) "收起" else "更多",BrowseButton.Role.FILTER,state.expanded) { state.expanded=!state.expanded;renderControls();controls.findViewWithTag<View>("more")?.requestFocus() }.trailingIcon(if(state.expanded) TvGlyph.Kind.UP else TvGlyph.Kind.DOWN).apply { tag="more" }
         options+=more; options+=BrowseButton(context,"重置",BrowseButton.Role.TEXT) { change(CategoryQuery(state.query.type,mapOf("sort" to listOf("hot_score")))) }.apply { tag="reset" }
         ui.line(controls,options)
         grid.topTarget=more
         options.forEach { view -> view.setOnKeyListener { _,key,event -> if(key==android.view.KeyEvent.KEYCODE_DPAD_DOWN && event.action==android.view.KeyEvent.ACTION_DOWN && !state.expanded) { grid.focusFirst();true } else false } }
-        val summary=state.dimensions.flatMap { row -> row.options.filter { it.id in state.query.selections[row.id].orEmpty() }.map { it.label } }.joinToString(" · ")
-        if(summary.isNotBlank()) controls.addView(ui.text("平台筛选结果 · $summary",11f,TvStyle.muted).apply { maxLines=2;setPadding(0,0,0,ui.dp(6)) })
+        val summary=state.dimensions.filter { it.id!=theme?.id }.flatMap { row -> row.options.filter { it.id in state.query.selections[row.id].orEmpty() }.map { it.label } }.distinct().joinToString(" · ")
+        if(!state.expanded && summary.isNotBlank()) controls.addView(ui.text("平台筛选结果 · $summary",11f,TvStyle.muted).apply { maxLines=2;setPadding(0,0,0,ui.dp(6)) })
         if(state.expanded) controls.addView(FilterPanelView(context,state.dimensions,state.query.selections) { row,id -> change(state.query.choose(row,id)) },LayoutParams(-1,ui.dp(if(BrowseLayout.compact(TvStyle.windowDp(context))) 100 else 170)))
         RemoteFocus.restore(controls,oldFocus)
     }

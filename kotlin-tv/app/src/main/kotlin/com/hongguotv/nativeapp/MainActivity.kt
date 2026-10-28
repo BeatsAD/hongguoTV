@@ -210,7 +210,7 @@ class MainActivity: Activity() {
             visibility=if(library.saveFailed) View.VISIBLE else View.GONE
             container.addView(this,lp(-1,-2))
         }
-        if(title!=null) { val heading=row(); addButton(heading,"‹ 返回") { goBack() }; heading.addView(text(title,22f).apply { setTypeface(null,Typeface.BOLD) },lp(0,dp(44)).apply { weight=1f }); container.addView(heading) }
+        if(title!=null) { val heading=row(); heading.addView(BrowseButton(this,"返回",BrowseButton.Role.TEXT) { goBack() }.leadingIcon(TvGlyph.Kind.BACK),lp(-2,-2).apply { rightMargin=dp(8) }); heading.addView(text(title,22f).apply { setTypeface(null,Typeface.BOLD) },lp(0,dp(44)).apply { weight=1f }); container.addView(heading) }
         return container
     }
     private fun onLibrarySaveState(state: Library.SaveState) {
@@ -450,7 +450,7 @@ class MainActivity: Activity() {
                     detailUpdatedAt=android.os.SystemClock.elapsedRealtime()
                     library.observeDetail(fresh,started)
                     if(fresh!=current) { pendingDetailUpdate=fresh; if(!tvTools.showing && speedDialog?.isShowing!=true && episodePanel==null) applyPendingDetail() }
-                    detailRefreshStatus?.text="分集已更新 · 共 ${fresh.episodes.size} 集 · 刷新"
+                    detailRefreshStatus?.text="分集已更新 · 刷新"
                 }.onFailure { detailRefreshStatus?.text="更新暂不可用 · 保留当前分集 · 重试" }
             }
         }
@@ -484,7 +484,7 @@ class MainActivity: Activity() {
         }
         val scroll=pageScroll();detailScroll=scroll;val content=column();scroll.addView(content)
         body.addView(scroll,lp(-1,0).apply { weight=1f })
-        val back=BrowseButton(this,"‹ 返回",BrowseButton.Role.TEXT) { goBack() }.apply { tag="detail:back" }
+        val back=BrowseButton(this,"返回",BrowseButton.Role.TEXT) { goBack() }.leadingIcon(TvGlyph.Kind.BACK).apply { tag="detail:back" }
         val backRow=row();backRow.addView(back);backRow.addView(text("剧集详情",12f,muted),lp(-2,-2).apply { leftMargin=dp(16) })
         content.addView(backRow,lp(-1,-2).apply { bottomMargin=dp(12) })
         val progress=library.progress(data.series.id)
@@ -492,20 +492,20 @@ class MainActivity: Activity() {
         val watched=library.watched(data.series.id)
         lateinit var header: DetailHeader
         header=DetailHeader(this,data.series,data.episodes.size,
-            if(watched) "▷ 重新观看" else if(progress!=null && !progress.completed) "▷ 继续第${resumeTarget.index+1}集" else "▷ 开始观看",::loadCover,
+            if(watched) "重新观看" else if(progress!=null && !progress.completed) "继续第${resumeTarget.index+1}集" else "开始观看",::loadCover,
             { tvTools.info(data.series.title,data.series.description.ifBlank { "暂无简介" },header.synopsisButton) },
             { playEpisode(if(watched) 0 else resumeTarget.index,if(watched) 0 else resumeTarget.position) },
             {
                 favoriteMonitor.stop();val saved=library.toggle(data.series)
                 if(saved) library.observeDetail(data,System.currentTimeMillis(),acknowledge=true)
-                header.favoriteButton.text=if(saved) "✓ 已收藏" else "＋ 收藏"
+                header.setFavorite(saved)
             },
-            { library.toggleLater(data.series);header.later.text=if(library.queued(data.series.id)) "✓ 已在稍后看" else "＋ 稍后看" },
+            { library.toggleLater(data.series);header.setQueued(library.queued(data.series.id)) },
             library.favorite(data.series.id),library.queued(data.series.id))
         content.addView(header,lp(-1,-2).apply { bottomMargin=dp(16) })
         val divider=View(this).apply { setBackgroundColor(TvStyle.outline) };content.addView(divider,lp(-1,dp(1)))
         val groupRow=row().apply { setPadding(0,dp(8),0,dp(6)) }
-        detailRefreshStatus=BrowseButton(this,"选集 · 全${data.episodes.size}集",BrowseButton.Role.TEXT) { refreshDetail(force=true) }.apply {
+        detailRefreshStatus=BrowseButton(this,"刷新选集",BrowseButton.Role.TEXT) { refreshDetail(force=true) }.apply {
             tag="detail:refresh";textSize=12f;contentDescription="共${data.episodes.size}集，刷新分集";groupRow.addView(this)
         }
         val maxGroup=(data.episodes.lastIndex/20).coerceAtLeast(0);group=group.coerceIn(0,maxGroup)
@@ -518,7 +518,7 @@ class MainActivity: Activity() {
         }
         groupRow.addView(groupScroll,lp(0,-2).apply { weight=1f;leftMargin=dp(10) })
         lateinit var jump: TextView
-        jump=BrowseButton(this,"跳转集数 ›",BrowseButton.Role.TEXT) { tvTools.episodePicker(data.episodes.size,episodeIndex,jump) { target -> episodeIndex=target;group=target/20;showDetail(true) } }.apply { tag="detail:jump";textSize=12f }
+        jump=BrowseButton(this,"跳转集数",BrowseButton.Role.TEXT) { tvTools.episodePicker(data.episodes.size,episodeIndex,jump) { target -> episodeIndex=target;group=target/20;showDetail(true) } }.trailingIcon(TvGlyph.Kind.NEXT).apply { tag="detail:jump";textSize=12f }
         groupRow.addView(jump);content.addView(groupRow)
         val episodes=mutableListOf<View>()
         val columns=if(BrowseLayout.compact(TvStyle.windowDp(this)) || resources.configuration.fontScale>1.2f) 5 else 10

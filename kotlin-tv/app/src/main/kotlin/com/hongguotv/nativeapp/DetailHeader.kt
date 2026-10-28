@@ -12,12 +12,15 @@ internal class DetailHeader(context: Context,series: Series,episodes: Int,playLa
     synopsis: ()->Unit,playAction: ()->Unit,favoriteAction: ()->Unit,laterAction: ()->Unit,
     favorite: Boolean,queued: Boolean): LinearLayout(context) {
     private val ui=BrowseUi(context)
-    val play=BrowseButton(context,playLabel,BrowseButton.Role.PRIMARY,action=playAction).apply { tag="detail:play" }
-    val favoriteButton=BrowseButton(context,if(favorite) "✓ 已收藏" else "＋ 收藏",action=favoriteAction).apply { tag="detail:favorite" }
-    val later=BrowseButton(context,if(queued) "✓ 已在稍后看" else "＋ 稍后看",action=laterAction).apply { tag="detail:later" }
-    val synopsisButton=BrowseButton(context,"完整简介 ›",BrowseButton.Role.TEXT,action=synopsis).apply { tag="detail:synopsis";textSize=12f }
+    val play=BrowseButton(context,playLabel,BrowseButton.Role.PRIMARY,action=playAction).leadingIcon(TvGlyph.Kind.PLAY).apply { tag="detail:play" }
+    val favoriteButton=BrowseButton(context,"",action=favoriteAction).apply { tag="detail:favorite" }
+    val later=BrowseButton(context,"",action=laterAction).apply { tag="detail:later" }
+    val synopsisButton=BrowseButton(context,"完整简介",BrowseButton.Role.TEXT,action=synopsis).trailingIcon(TvGlyph.Kind.NEXT).apply { tag="detail:synopsis";textSize=12f }
     val actions get()=listOf(play,favoriteButton,later)
+    fun setFavorite(value: Boolean) { favoriteButton.text=if(value) "已收藏" else "收藏";favoriteButton.leadingIcon(if(value) TvGlyph.Kind.CHECK else TvGlyph.Kind.PLUS) }
+    fun setQueued(value: Boolean) { later.text=if(value) "已在稍后看" else "稍后看";later.leadingIcon(if(value) TvGlyph.Kind.CHECK else TvGlyph.Kind.PLUS) }
     init {
+        setFavorite(favorite);setQueued(queued)
         orientation=HORIZONTAL;clipChildren=false;gravity=android.view.Gravity.TOP
         val compact=BrowseLayout.compact(TvStyle.windowDp(context));val posterWidth=if(compact) 112 else 162
         val poster=ImageView(context).apply {
