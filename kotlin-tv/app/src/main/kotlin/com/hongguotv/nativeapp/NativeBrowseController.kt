@@ -38,6 +38,7 @@ class NativeBrowseController(private val activity: Activity,private val reposito
     private var scaffold: BrowseScaffold?=null
     private var restoreContentFocus=true
     private var home: HomeScreen?=null
+    private val homeRefresh=HomeRefreshState()
     private var homePosition: HomeScreen.Position?=null
     private var catalogView: CatalogScreen?=null
     private var rankView: RankingScreen?=null
@@ -70,6 +71,7 @@ class NativeBrowseController(private val activity: Activity,private val reposito
         epoch++;jobs.values.forEach { (scope,future) -> scope.cancel();future.cancel(true) };jobs.clear()
         (workers as java.util.concurrent.ThreadPoolExecutor).purge()
         (states.values+homes.values).forEach { it.busy=false };ranking.busy=false;search.busy=false
+        homeRefresh.cancel()
     }
     fun leave() { capture();active=false;stopJobs();closePhone();home=null;catalogView=null;rankView=null;searchView=null;localGrid=null }
     fun pause() { leave() }
@@ -138,7 +140,7 @@ class NativeBrowseController(private val activity: Activity,private val reposito
     }
     private fun focusContent() {
         when(route) {
-            "home" -> home?.findViewById<View>(home!!.firstId())?.requestFocus()
+            "home" -> home?.focusContent()
             "catalog" -> catalogView?.grid?.takeIf { states.getValue(type).items.isNotEmpty() }?.focusFirst() ?: firstControl()
             "search" -> if(search.items.isNotEmpty()) searchView?.grid?.focusFirst() else firstControl()
             "ranks" -> if(ranking.entries.isNotEmpty()) rankView?.grid?.focusFirst() else firstControl()
@@ -148,10 +150,11 @@ class NativeBrowseController(private val activity: Activity,private val reposito
     }
     private fun firstControl() { val views=java.util.ArrayList<View>();content?.addFocusables(views,View.FOCUS_DOWN);views.firstOrNull()?.requestFocus() }
     private fun renderHome(body: LinearLayout) {
-        val heading=ui.heading("首页",22f)
-        heading.addView(BrowseButton(activity,"搜索剧名",BrowseButton.Role.SEARCH) { search.scope=null;select("search") },LinearLayout.LayoutParams(ui.dp(if(BrowseLayout.compact(TvStyle.windowDp(activity))) 130 else 160),-2));body.addView(heading,LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=ui.dp(10) })
+        val heading=HomeHeader(activity,sidebar!!,::refreshHome,{ search.scope=null;select("search") },{ home?.focusContent() })
+        body.addView(heading,LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=ui.dp(4) })
         home=HomeScreen(activity,sidebar!!,load,{ _,_-> },{ series,resume -> openChecked(series,resume) },actions,{}).also { view ->
-            body.addView(view,LinearLayout.LayoutParams(-1,0,1f));view.nearEnd={ key -> ContentType.known(key)?.let { loadHome(it) } }
+            view.header=heading
+            body.addView(view,LinearLayout.LayoutParams(-1,0,1f));view.nearEnd={ key -> if(!homeRefresh.running) ContentType.known(key)?.let { loadHome(it) } }
         }
         homes.forEach { (genre,state) -> if(state.items.isEmpty()) library.cachedHome(genre)?.let { state.items=it.items } }
         updateHome()
@@ -167,7 +170,20 @@ class NativeBrowseController(private val activity: Activity,private val reposito
             shelves+=HomeScreen.Shelf(genre.storedValue,genre.label,state.items.filterNot { it.id in library.hidden() }.map { HomeScreen.Entry(it,"") },suffix.removePrefix(" · ")) { select("catalog",genre) }
         }
         home?.updateShelves(shelves,requestFocus=home?.hasFocus()==true)
-        home?.refresh?.apply { text=if(homes.values.any { it.error.isNotBlank() }) "首页部分内容未更新 · 确认重试" else "刷新首页";setOnClickListener { homes.forEach { (genre,state) -> state.cursor=null;state.error="";loadHome(genre) } } }
+        val busy=homes.values.any { it.busy }
+        val feedback=when {
+            homeRefresh.running -> homeRefresh.message
+            busy -> ""
+            homes.values.any { it.error.isNotBlank() } -> if(homeRefresh.failed) homeRefresh.message else "首页部分内容未更新，请刷新重试"
+            else -> homeRefresh.message
+        }
+        home?.header?.update(busy,homeRefresh.running,feedback)
+    }
+    private fun refreshHome() {
+        if(homes.values.any { it.busy } || !homeRefresh.begin(ContentType.entries.map { it.label })) return
+        homes.values.forEach { it.cursor=null;it.error="" }
+        home?.reloadArtwork()
+        ContentType.entries.forEach(::loadHome)
     }
     private fun loadHome(genre: ContentType) {
         val state=homes.getValue(genre)
@@ -177,8 +193,9 @@ class NativeBrowseController(private val activity: Activity,private val reposito
             state.busy=false;val prior=if(cursor==null) emptyList() else state.items;val merged=ListProgress.merge(prior,result.items) { it.id }
             state.items=merged.take(54);state.hasMore=result.hasMore
             state.error=if(ListProgress.stalled(cursor?.offset ?: -1,result.cursor.offset,merged.size-prior.size,result.hasMore)) "分页未前进" else ""
-            state.cursor=result.cursor;library.cacheHome(genre,result.items,result.hasMore);updateHome()
-        },{ e -> state.busy=false;state.error=error(e);updateHome() })
+            state.cursor=result.cursor;library.cacheHome(genre,result.items,result.hasMore)
+            homeRefresh.complete(genre.label,state.error.isNotBlank());updateHome()
+        },{ e -> state.busy=false;state.error=error(e);homeRefresh.complete(genre.label,true);updateHome() })
     }
     private fun renderCatalog(body: LinearLayout) {
         val state=states.getValue(type)
