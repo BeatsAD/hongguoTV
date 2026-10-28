@@ -16,9 +16,9 @@ class SearchScreen(context: Context,private val state: SearchUiState,sidebar: Vi
     actions: (Series,View)->Unit,private val scope: (ContentType?)->Unit,private val query: (String)->Unit,history: List<RecentSearch>,private val clear: ()->Unit,reset: ()->Unit,refresh: ()->Unit,append: ()->Unit,private val restoreFocus: Boolean=true): LinearLayout(context) {
     private val ui=BrowseUi(context)
     private val qr=ImageView(context).apply { scaleType=ImageView.ScaleType.FIT_CENTER;setBackgroundColor(Color.WHITE);setPadding(ui.dp(4),ui.dp(4),ui.dp(4),ui.dp(4)) }
-    private val connection=ui.text("正在生成二维码…",11f,TvStyle.muted).apply { gravity=Gravity.CENTER;maxLines=2 }
-    private val remaining=ui.text("",10f,TvStyle.muted).apply { gravity=Gravity.CENTER }
-    private val resultTitle=ui.text("最近搜索",16f).apply { maxLines=2 }
+    private val connection=ui.text("正在生成二维码…",14f,TvStyle.muted).apply { gravity=Gravity.CENTER;maxLines=2 }
+    private val remaining=ui.text("",12f,TvStyle.muted).apply { gravity=Gravity.CENTER }
+    private val resultTitle=ui.text("最近搜索",18f).apply { maxLines=2 }
     private var hasHistory=false
     private val waiting=ui.column()
     private val waitingFrame=FrameLayout(context)
@@ -41,16 +41,16 @@ class SearchScreen(context: Context,private val state: SearchUiState,sidebar: Vi
         val compact=BrowseLayout.compact(TvStyle.windowDp(context))
         val left=ui.column().apply {
             gravity=Gravity.CENTER_HORIZONTAL;setPadding(ui.dp(if(compact) 10 else 15),ui.dp(14),ui.dp(if(compact) 10 else 15),ui.dp(12))
-            background=TvStyle.shape(context,0xFF14171E.toInt(),0xFF303642.toInt(),8,.5f)
+            background=TvStyle.shape(context,TvStyle.subtle,TvStyle.divider,8,.5f)
         }
         left.addView(ui.text("手机扫码输入",16f).apply { gravity=Gravity.CENTER })
         left.addView(connection,LayoutParams(-1,-2).apply { topMargin=ui.dp(8) })
         val qrSize=if(compact) 132 else 164
         left.addView(qr,LayoutParams(ui.dp(qrSize),ui.dp(qrSize)).apply { topMargin=ui.dp(12);bottomMargin=ui.dp(12) })
         listOf("①  手机扫码打开输入页","②  输入剧名，发送到电视","③  用遥控器选择剧集").forEach { step ->
-            left.addView(ui.text(step,12f,0xFFC3CDDD.toInt()),LayoutParams(-1,-2).apply { bottomMargin=ui.dp(7) })
+            left.addView(ui.text(step,12f,TvStyle.muted),LayoutParams(-1,-2).apply { bottomMargin=ui.dp(7) })
         }
-        left.addView(ui.text("手机和电视需连接同一局域网",10f,TvStyle.muted).apply { gravity=Gravity.CENTER },LayoutParams(-1,-2).apply { topMargin=ui.dp(4) })
+        left.addView(ui.text("手机和电视需连接同一局域网",12f,TvStyle.muted).apply { gravity=Gravity.CENTER },LayoutParams(-1,-2).apply { topMargin=ui.dp(4) })
         left.addView(remaining,LayoutParams(-1,-2).apply { topMargin=ui.dp(5) })
         left.addView(refreshControl,LayoutParams(-2,-2).apply { topMargin=ui.dp(9) })
         // On compact displays the refresh action starts below the QR viewport. Explicit links
@@ -67,11 +67,12 @@ class SearchScreen(context: Context,private val state: SearchUiState,sidebar: Vi
     }
     private fun showScopes() {
         val options=listOf(null,ContentType.SHORT,ContentType.COMIC,ContentType.AI)
-        PopupMenu(context,scopeButton).apply {
-            options.forEachIndexed { index,type -> menu.add(0,index,index,type?.label ?: "全部剧集").apply { isCheckable=true;isChecked=type==state.scope } }
-            setOnMenuItemClickListener { scope(options[it.itemId]);true };show()
-        }
+        val labels=options.map { it?.label ?: "全部剧集" }
+        val dialog=android.app.AlertDialog.Builder(context).setTitle("搜索范围").setSingleChoiceItems(labels.toTypedArray(),options.indexOf(state.scope)) { picker,index -> scope(options[index]);picker.dismiss() }.setNegativeButton("取消",null).create()
+        dialog.setOnDismissListener { scopeButton.requestFocus() };dialog.show();TvDialogStyle.apply(dialog)
+        dialog.listView.setSelection(options.indexOf(state.scope));dialog.listView.requestFocus()
     }
+
     fun renderScopes() { scopeButton.text="范围：${state.scope?.label ?: "全部剧集"}";scopeButton.trailingIcon(TvGlyph.Kind.DOWN);grid.topTarget=scopeButton }
     fun showHistory(history: List<RecentSearch>) {
         waiting.removeAllViews()
@@ -80,7 +81,7 @@ class SearchScreen(context: Context,private val state: SearchUiState,sidebar: Vi
             val flow=BrowseFlow(context)
             history.take(8).forEach { item -> flow.addView(BrowseButton(context,item.query) { query(item.query) }.apply { maxWidth=ui.dp(160) }) }
             waiting.addView(flow,LayoutParams(-1,-2))
-            waiting.addView(BrowseButton(context,"清空搜索历史",BrowseButton.Role.TEXT) { clear();waitingScroll.requestFocus() }.apply { textSize=11f },LayoutParams(-2,-2).apply { topMargin=ui.dp(7) })
+            waiting.addView(BrowseButton(context,"清空搜索历史",BrowseButton.Role.TEXT) { clear();waitingScroll.requestFocus() }.apply { textSize=14f },LayoutParams(-2,-2).apply { topMargin=ui.dp(7) })
             waiting.addView(View(context).apply { setBackgroundColor(TvStyle.outline) },LayoutParams(-1,ui.dp(1)).apply { topMargin=ui.dp(20);bottomMargin=ui.dp(20) })
         }
         waiting.addView(ui.text("发送剧名后，结果会显示在这里。\n可继续发送新剧名，无需重新扫码。",13f,TvStyle.muted).apply { setLineSpacing(ui.dp(4).toFloat(),1f) })

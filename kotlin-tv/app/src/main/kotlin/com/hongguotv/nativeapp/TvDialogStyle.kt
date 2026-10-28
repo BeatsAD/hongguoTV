@@ -2,33 +2,55 @@
 package com.hongguotv.nativeapp
 
 import android.app.AlertDialog
-import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.view.ViewGroup
 import android.widget.TextView
 
-/** Shared modal geometry; leave each owner's dismissal and focus-return callbacks intact. */
+/** Theme all app-owned alert controls, including stock adapter and numeric-keypad buttons. */
 object TvDialogStyle {
     fun diagnosticBodyHeight(context: android.content.Context)=(context.resources.displayMetrics.heightPixels*.55f).toInt()
     fun apply(dialog: AlertDialog) {
-        val context=dialog.context; val metrics=context.resources.displayMetrics
+        val context=dialog.context;val metrics=context.resources.displayMetrics
+        fun dp(n: Int)=(n*metrics.density).toInt()
+        val width=minOf(metrics.widthPixels-dp(64),dp(460))
         dialog.window?.apply {
+            addFlags(android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN)
             setBackgroundDrawableResource(R.drawable.dialog_surface)
-            setLayout(minOf((metrics.widthPixels*.46f).toInt(),(460*metrics.density).toInt()),ViewGroup.LayoutParams.WRAP_CONTENT)
+            setLayout(width,ViewGroup.LayoutParams.WRAP_CONTENT)
+            decorView.post { if(decorView.height>metrics.heightPixels*.8f) setLayout(width,(metrics.heightPixels*.8f).toInt()) }
         }
-        dialog.listView?.apply {
-            selector=TvStyle.shape(context,TvStyle.raised,TvStyle.text,radius=12)
-            divider=ColorDrawable(TvStyle.outline); dividerHeight=(metrics.density*.5f).toInt().coerceAtLeast(1)
-        }
-        listOf(AlertDialog.BUTTON_POSITIVE,AlertDialog.BUTTON_NEGATIVE,AlertDialog.BUTTON_NEUTRAL).forEach { which ->
-            dialog.getButton(which)?.apply {
-                textSize=13f
-                setTextColor(android.content.res.ColorStateList(
-                    arrayOf(intArrayOf(android.R.attr.state_focused),intArrayOf(android.R.attr.state_pressed),intArrayOf()),
-                    intArrayOf(TvStyle.background,TvStyle.background,TvStyle.text)))
-                minHeight=(42*metrics.density).toInt()
+        fun styleChoices(group: ViewGroup) {
+            for(index in 0 until group.childCount) {
+                val child=group.getChildAt(index)
+                if(child is android.widget.CompoundButton) { child.minHeight=dp(52);child.textSize=16f;TvStyle.bind(child) }
+                if(child is ViewGroup) styleChoices(child)
             }
         }
-        dialog.findViewById<TextView>(android.R.id.message)?.apply { textSize=13f; setTextColor(Color.rgb(174,176,187)) }
+        (dialog.window?.decorView as? ViewGroup)?.let(::styleChoices)
+        dialog.listView?.apply {
+            selector=TvStyle.focused(context,TvStyle.raised,8)
+            setPadding(dp(6),dp(6),dp(6),dp(6));clipToPadding=false
+            divider=ColorDrawable(TvStyle.divider);dividerHeight=dp(1)
+        }
+        listOf(AlertDialog.BUTTON_POSITIVE,AlertDialog.BUTTON_NEGATIVE,AlertDialog.BUTTON_NEUTRAL).forEach { which ->
+            dialog.getButton(which)?.apply { textSize=16f;minHeight=dp(44);isAllCaps=false;TvStyle.bind(this) }
+        }
+        dialog.findViewById<TextView>(android.R.id.message)?.apply {
+            textSize=14f;setTextColor(TvStyle.muted)
+            post {
+                if(lineCount>6) {
+                    var ancestor=parent
+                    while(ancestor is android.view.View && ancestor !is android.widget.ScrollView) ancestor=ancestor.parent
+                    (ancestor as? android.widget.ScrollView)?.apply {
+                        isFocusable=true;isFocusableInTouchMode=true;contentDescription="上下滚动正文";TvStyle.bind(this,quiet=true)
+                        nextFocusDownId=dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.id ?: id
+                        requestFocus()
+                    }
+                }
+            }
+        }
+        @Suppress("DiscouragedApi")
+        val title=context.resources.getIdentifier("alertTitle","id","android")
+        dialog.findViewById<TextView>(title)?.apply { textSize=22f;setTextColor(TvStyle.text) }
     }
 }

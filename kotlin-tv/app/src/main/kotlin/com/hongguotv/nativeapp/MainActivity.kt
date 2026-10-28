@@ -121,6 +121,8 @@ class MainActivity: Activity() {
     private var hasMore=false
     private val nav=mutableListOf<View>()
     private var detail: Detail?=null
+    private val detailEpisodeFocus=mutableMapOf<String,Int>()
+    private val detailActionFocus=mutableMapOf<String,String>()
     private var episodeIndex=0
     private var group=0
     private var player: ExoPlayer?=null
@@ -163,16 +165,14 @@ class MainActivity: Activity() {
     private fun lp(w: Int=LinearLayout.LayoutParams.MATCH_PARENT,h: Int=LinearLayout.LayoutParams.WRAP_CONTENT)=LinearLayout.LayoutParams(w,h)
     private fun rounded(color: Int,border: Int=Color.TRANSPARENT)=TvStyle.shape(this,color,border)
     private fun text(value: String,size: Float=16f,color: Int=white)=TextView(this).apply { text=value; textSize=size; setTextColor(color); includeFontPadding=false }
-    private fun column()=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }
-    private fun row()=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL; gravity=Gravity.CENTER_VERTICAL }
+    private fun column()=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL;clipChildren=false }
+    private fun row()=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL; gravity=Gravity.CENTER_VERTICAL;clipChildren=false }
     private fun focusStyle(view: View,selected: Boolean=false) {
         view.id=View.generateViewId(); view.isFocusable=true; view.isFocusableInTouchMode=true
-        fun paint(focused: Boolean) { view.background=if(selected && focused) TvStyle.focused(this,white,10) else rounded(if(selected) white else if(focused) TvStyle.raised else surface,if(focused) white else Color.TRANSPARENT) }
-        paint(false); view.setOnFocusChangeListener { _,focused -> paint(focused) }
+        view.isSelected=selected;TvStyle.bind(view)
     }
-    private fun button(label: String,selected: Boolean=false,onClick: ()->Unit): TextView = text(label,15f).apply {
-        gravity=Gravity.CENTER; setTextColor(if(selected) bg else white); isSelected=selected; setPadding(dp(14),dp(10),dp(14),dp(10)); minHeight=dp(42); focusStyle(this,selected); setOnClickListener { onClick() }
-    }
+    private fun button(label: String,selected: Boolean=false,onClick: ()->Unit): TextView = BrowseButton(this,label,selected=selected,action=onClick)
+
     private fun addButton(parent: LinearLayout,label: String,selected: Boolean=false,onClick: ()->Unit): TextView {
         val view=button(label,selected,onClick); parent.addView(view,lp().apply { width=LinearLayout.LayoutParams.WRAP_CONTENT; rightMargin=dp(8) }); return view
     }
@@ -181,6 +181,8 @@ class MainActivity: Activity() {
         val playbackIdentity=getSharedPreferences("anonymous-playback-v1",Context.MODE_PRIVATE)
         PlaybackDeviceSession.shared.restore(playbackIdentity.getString("profile",null))
         PlaybackDeviceSession.shared.changed={ value -> playbackIdentity.edit().putString("profile",value).apply() }
+        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN)
+
         val cooldowns=getSharedPreferences("content-cooldowns-v1",Context.MODE_PRIVATE)
         repository.requestGate.restore(cooldowns.all.mapNotNull { (host,value) -> (value as? Long)?.let { host to it } }.toMap())
         repository.requestGate.changed={ values -> cooldowns.edit().apply { values.forEach { (host,until) -> putLong(host,until) } }.apply() }
@@ -282,16 +284,11 @@ class MainActivity: Activity() {
     }
 
     private fun iconButton(kind: TvGlyph.Kind,label: String,selected: Boolean=false,action: ()->Unit): TextView {
-        val glyph=TvGlyph(kind).apply { setBounds(0,0,dp(20),dp(20)) }
-        return button("",selected,action).apply {
-            contentDescription=label; setPadding(dp(11),dp(11),dp(11),dp(11)); setCompoundDrawables(glyph,null,null,null)
-            fun paint(focus: Boolean) {
-                glyph.color(if(selected || focus) bg else white)
-                background=if(focus) TvStyle.focused(this@MainActivity,white,100) else TvStyle.shape(this@MainActivity,if(selected) white else surface,radius=100)
-            }
-            paint(false); setOnFocusChangeListener { _,focused -> paint(focused) }
+        return BrowseButton(this,"",selected=selected,action=action).leadingIcon(kind).apply {
+            contentDescription=label;minWidth=dp(44);setPadding(dp(12),dp(10),dp(12),dp(10))
         }
     }
+
     private fun pageTitle(parent: LinearLayout,title: String) {
         parent.addView(BrowseUi(this).title(title),lp(-1,-2).apply { bottomMargin=dp(12) })
     }
@@ -346,8 +343,8 @@ class MainActivity: Activity() {
             val kind=when { label.startsWith("默认清晰度")->TvGlyph.Kind.QUALITY; label.startsWith("默认倍速")->TvGlyph.Kind.SPEED; label.startsWith("画面")->TvGlyph.Kind.FRAME; label.startsWith("手机")->TvGlyph.Kind.TRANSFER; label.startsWith("恢复")->TvGlyph.Kind.EYE; label.startsWith("开源")->TvGlyph.Kind.CODE; else->TvGlyph.Kind.INFO }
             val panel=panels.getValue(group); separator(panel)
             return PreferenceRow(this,label,kind).apply {
-                focusStyle(this); background=rounded(Color.TRANSPARENT); setOnClickListener { action() }
-                setOnFocusChangeListener { _,focused -> background=rounded(if(focused) TvStyle.raised else Color.TRANSPARENT,if(focused) white else Color.TRANSPARENT) }
+                focusStyle(this); setOnClickListener { action() }
+
                 panel.addView(this,lp(-1,-2))
             }
         }
@@ -361,15 +358,15 @@ class MainActivity: Activity() {
         frame=setting(playback,"画面模式  ·  ${library.frameMode.label}") { showFramePicker(frame,false) }
         separator(panels.getValue(playback))
         val autoNextButton=PreferenceSwitch(this).apply {
-            text="自动连播"; isChecked=library.autoNext; focusStyle(this); background=rounded(Color.TRANSPARENT)
-            setOnFocusChangeListener { _,f -> background=rounded(if(f) TvStyle.raised else Color.TRANSPARENT,if(f) white else Color.TRANSPARENT) }
+            text="自动连播"; isChecked=library.autoNext; focusStyle(this)
+
             switchMinWidth=dp(44)
             // Native Switch stretches its thumb bounds to the track height. Equal outer
             // dimensions plus an inset keep the visible thumb circular at every density.
             thumbDrawable=InsetDrawable(GradientDrawable().apply { shape=GradientDrawable.OVAL; setColor(white); setSize(dp(20),dp(20)) },dp(3))
             trackDrawable=TvStyle.shape(this@MainActivity,surface,radius=100).apply { setSize(dp(44),dp(26)) }
             thumbTintList=android.content.res.ColorStateList.valueOf(white)
-            trackTintList=android.content.res.ColorStateList(arrayOf(intArrayOf(android.R.attr.state_checked),intArrayOf()),intArrayOf(Color.rgb(52,199,89),TvStyle.outline))
+            trackTintList=android.content.res.ColorStateList(arrayOf(intArrayOf(android.R.attr.state_checked),intArrayOf()),intArrayOf(TvStyle.currentOutline,TvStyle.outline))
             setOnCheckedChangeListener { _,checked -> library.autoNext=checked }; panels.getValue(playback).addView(this,lp(-1,-2))
         }
         playback.addView(text("偏好自动保存，所有剧集共用。",12f,muted).apply { setPadding(dp(12),dp(12),0,0) })
@@ -488,15 +485,15 @@ class MainActivity: Activity() {
         val shell=browser.detailScaffold(root) { key,genre ->
             invalidatePage();releaseCatalogViews();screen=Screen.CATALOG;browser.select(key,genre,keepNavigationFocus=true)
         }
-        val body=shell.body;nav.clear();nav.addAll(shell.navigation)
+        val body=shell.body;body.setPadding(body.paddingLeft,dp(12),body.paddingRight,dp(12));nav.clear();nav.addAll(shell.navigation)
         saveStatusView=BrowseButton(this,"本机改动尚未保存 · 重试保存",BrowseButton.Role.TEXT) { library.flush() }.also {
             it.visibility=if(library.saveFailed) View.VISIBLE else View.GONE;body.addView(it)
         }
-        val scroll=pageScroll();detailScroll=scroll;val content=column();scroll.addView(content)
+        val scroll=pageScroll();detailScroll=scroll;val content=column().apply { setPadding(dp(6),dp(6),dp(6),dp(6)) };scroll.clipToPadding=false;scroll.addView(content)
         body.addView(scroll,lp(-1,0).apply { weight=1f })
         val back=BrowseButton(this,"返回",BrowseButton.Role.TEXT) { goBack() }.leadingIcon(TvGlyph.Kind.BACK).apply { tag="detail:back" }
         val backRow=row();backRow.addView(back);backRow.addView(text("剧集详情",12f,muted),lp(-2,-2).apply { leftMargin=dp(16) })
-        content.addView(backRow,lp(-1,-2).apply { bottomMargin=dp(12) })
+        content.addView(backRow,lp(-1,-2).apply { bottomMargin=dp(2) })
         val progress=library.progress(data.series.id)
         val resumeTarget=ResumePlayback.target(data.episodes,progress?.episodeId,progress?.position ?: 0,progress?.completed==true)
         val watched=library.watched(data.series.id)
@@ -512,35 +509,36 @@ class MainActivity: Activity() {
             },
             { library.toggleLater(data.series);header.setQueued(library.queued(data.series.id)) },
             library.favorite(data.series.id),library.queued(data.series.id))
-        content.addView(header,lp(-1,-2).apply { bottomMargin=dp(16) })
+        content.addView(header,lp(-1,-2).apply { bottomMargin=dp(6) })
         val divider=View(this).apply { setBackgroundColor(TvStyle.outline) };content.addView(divider,lp(-1,dp(1)))
-        val groupRow=row().apply { setPadding(0,dp(8),0,dp(6)) }
-        detailRefreshStatus=BrowseButton(this,"刷新选集",BrowseButton.Role.TEXT) { refreshDetail(force=true) }.apply {
-            tag="detail:refresh";textSize=12f;contentDescription="共${data.episodes.size}集，刷新分集";groupRow.addView(this)
+        val groupRow=row().apply { clipChildren=false;setPadding(0,dp(6),0,dp(6)) }
+        detailRefreshStatus=BrowseButton(this,"刷新",BrowseButton.Role.TEXT) { refreshDetail(force=true) }.apply {
+            tag="detail:refresh";contentDescription="共${data.episodes.size}集，刷新分集";groupRow.addView(this)
         }
         val maxGroup=(data.episodes.lastIndex/20).coerceAtLeast(0);group=group.coerceIn(0,maxGroup)
-        val groupScroll=HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled=false }
+        val groupScroll=HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled=false;clipToPadding=false;setPadding(dp(6),dp(6),dp(6),dp(6)) }
         val groups=row();groupScroll.addView(groups);val groupButtons=mutableListOf<View>()
         (0..maxGroup).forEach { part ->
             val first=part*20+1;val last=minOf((part+1)*20,data.episodes.size)
-            val control=BrowseButton(this,"$first—$last",BrowseButton.Role.TAB,part==group) { group=part;showDetail(false,preservePosition=true) }.autoSelect().apply { tag="detail:group:$part";textSize=12f }
+            val control=BrowseButton(this,"$first—$last",BrowseButton.Role.TAB,part==group) { group=part;showDetail(false,preservePosition=true) }.autoSelect().apply { tag="detail:group:$part" }
             groups.addView(control,lp(-2,-2).apply { rightMargin=dp(6) });groupButtons+=control
         }
         groupRow.addView(groupScroll,lp(0,-2).apply { weight=1f;leftMargin=dp(10) })
         lateinit var jump: TextView
-        jump=BrowseButton(this,"跳转集数",BrowseButton.Role.TEXT) { tvTools.episodePicker(data.episodes.size,episodeIndex,jump) { target -> episodeIndex=target;group=target/20;showDetail(true) } }.trailingIcon(TvGlyph.Kind.NEXT).apply { tag="detail:jump";textSize=12f }
+        jump=BrowseButton(this,"跳转集数",BrowseButton.Role.TEXT) { tvTools.episodePicker(data.episodes.size,episodeIndex,jump) { target -> episodeIndex=target;group=target/20;showDetail(true) } }.trailingIcon(TvGlyph.Kind.NEXT).apply { tag="detail:jump" }
         groupRow.addView(jump);content.addView(groupRow)
         val episodes=mutableListOf<View>()
         val columns=if(BrowseLayout.compact(TvStyle.windowDp(this)) || resources.configuration.fontScale>1.2f) 5 else 10
         (group*20 until minOf((group+1)*20,data.episodes.size)).toList().chunked(columns).forEach { numbers ->
             val line=row()
             numbers.forEach { index ->
-                val item=BrowseButton(this,"${index+1}",if(index==episodeIndex) BrowseButton.Role.PRIMARY else BrowseButton.Role.ACTION) { playEpisode(index,if(progress?.episodeId==data.episodes[index] && !progress.completed) progress.position else 0) }
-                item.tag="detail:episode:${data.episodes[index]}";item.contentDescription="第${index+1}集"
-                line.addView(item,lp(0,dp(40)).apply { weight=1f;rightMargin=dp(6) });episodes+=item
+                val item=BrowseButton(this,"${index+1}",BrowseButton.Role.EPISODE,index==episodeIndex) { playEpisode(index,if(progress?.episodeId==data.episodes[index] && !progress.completed) progress.position else 0) }
+                item.tag="detail:episode:${data.episodes[index]}";item.contentDescription="第${index+1}集"+(if(index==episodeIndex) "，当前集" else "")
+                item.setOnFocusChangeListener { _,focused -> if(focused) { detailEpisodeFocus["${data.series.id}:$group"]=index; (groupButtons+listOfNotNull(detailRefreshStatus,jump)).forEach { it.nextFocusDownId=item.id } } }
+                line.addView(item,lp(0,dp(44)).apply { weight=1f;rightMargin=dp(10) });episodes+=item
             }
-            repeat(columns-numbers.size) { line.addView(Space(this),lp(0,dp(40)).apply { weight=1f;rightMargin=dp(6) }) }
-            content.addView(line,lp(-1,dp(47)))
+            repeat(columns-numbers.size) { line.addView(Space(this),lp(0,dp(44)).apply { weight=1f;rightMargin=dp(10) }) }
+            content.addView(line,lp(-1,dp(54)))
         }
         episodes.forEachIndexed { i,v ->
             v.nextFocusLeftId=if(i%columns==0) shell.selectedNav.id else episodes[i-1].id
@@ -548,14 +546,15 @@ class MainActivity: Activity() {
             v.nextFocusUpId=if(i>=columns) episodes[i-columns].id else groupButtons.getOrNull(group)?.id ?: jump.id
             v.nextFocusDownId=if(i+columns<episodes.size) episodes[i+columns].id else v.id
         }
+        content.addView(text((if(progress==null) "待播第${episodeIndex+1}集" else "上次看到第${resumeTarget.index+1}集")+" · 方向键移动，确认播放",12f,muted),lp(-1,-2).apply { topMargin=dp(6) })
         val play=header.play
         back.nextFocusLeftId=shell.selectedNav.id;back.nextFocusDownId=play.id
         header.actions.forEachIndexed { i,view ->
-            view.nextFocusUpId=header.synopsisButton.id;view.nextFocusDownId=groupButtons.getOrNull(group)?.id ?: jump.id
+            view.nextFocusUpId=back.id;view.nextFocusDownId=groupButtons.getOrNull(group)?.id ?: jump.id
+            view.setOnFocusChangeListener { _,focused -> if(focused) { detailActionFocus[data.series.id]=view.tag.toString();(groupButtons+listOfNotNull(detailRefreshStatus,jump)).forEach { it.nextFocusUpId=view.id } } }
             view.nextFocusLeftId=header.actions.getOrNull(i-1)?.id ?: shell.selectedNav.id;view.nextFocusRightId=header.actions.getOrNull(i+1)?.id ?: view.id
         }
-        header.synopsisButton.nextFocusUpId=back.id;header.synopsisButton.nextFocusDownId=play.id;header.synopsisButton.nextFocusLeftId=shell.selectedNav.id
-        (groupButtons+listOfNotNull(detailRefreshStatus,jump)).forEach { it.nextFocusUpId=play.id;it.nextFocusDownId=episodes.firstOrNull()?.id ?: play.id }
+        (groupButtons+listOfNotNull(detailRefreshStatus,jump)).forEach { it.nextFocusUpId=header.actions.firstOrNull { it.tag==detailActionFocus[data.series.id] }?.id ?: play.id;it.nextFocusDownId=episodes.getOrNull(((detailEpisodeFocus["${data.series.id}:$group"] ?: episodeIndex)-group*20).coerceIn(0,(episodes.size-1).coerceAtLeast(0)))?.id ?: play.id }
         shell.enterContent={ play.requestFocus() }
         groupButtons.getOrNull(group)?.let { selected -> groupScroll.post { groupScroll.scrollTo(selected.left,0) } }
         if(focusEpisode) episodes.getOrNull((episodeIndex-group*20).coerceIn(0,(episodes.size-1).coerceAtLeast(0)))?.requestFocus() ?: play.requestFocus() else play.requestFocus()
@@ -607,7 +606,7 @@ class MainActivity: Activity() {
             hud=column().apply { setPadding(dp(widthDp()*.05f),dp(20),dp(widthDp()*.05f),(resources.displayMetrics.heightPixels*.05f).toInt()); background=GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,intArrayOf(Color.TRANSPARENT,Color.argb(240,11,12,15))) }
             val heading=row().apply { setPadding(dp(42),dp(24),dp(42),dp(20)); background=GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,intArrayOf(Color.argb(160,11,12,15),Color.TRANSPARENT)) }
             val back=iconButton(TvGlyph.Kind.NEXT,"返回") { returnToDetail() }.apply { rotation=180f }; playerBack=back
-            heading.addView(back,lp(dp(40),dp(40)).apply { rightMargin=dp(14) })
+            heading.addView(back,lp(dp(44),dp(44)).apply { rightMargin=dp(14) })
             val titles=column(); playbackTitle=text("",17f).apply { maxLines=1; ellipsize=TextUtils.TruncateAt.END }
             titles.addView(playbackTitle); playbackEpisode=text("",12f,muted).also { titles.addView(it,lp(-1,-2).apply { topMargin=dp(4) }) }; heading.addView(titles,lp(0,-2).apply { weight=1f })
             playerHeading=heading; root.addView(heading,FrameLayout.LayoutParams(-1,-2,Gravity.TOP))
@@ -865,7 +864,7 @@ class MainActivity: Activity() {
         panel=true; showHud(); controls.visibility=View.VISIBLE; controls.removeAllViews()
         val transport=row(); controls.addView(transport)
         fun control(kind: TvGlyph.Kind,label: String,enabled: Boolean=true,click: ()->Unit)=iconButton(kind,label,action=click).apply {
-            isEnabled=enabled; isFocusable=enabled; alpha=if(enabled) 1f else .3f; transport.addView(this,lp(dp(42),dp(42)).apply { rightMargin=dp(10) })
+            isEnabled=enabled; isFocusable=enabled; alpha=if(enabled) 1f else .3f; transport.addView(this,lp(dp(44),dp(44)).apply { rightMargin=dp(10) })
         }
         val previous=control(TvGlyph.Kind.PREVIOUS,"上一集",episodeIndex>0) { if(episodeIndex>0) playEpisode(episodeIndex-1) }
         val play=iconButton(if(player?.playWhenReady==true) TvGlyph.Kind.PAUSE else TvGlyph.Kind.PLAY,if(player?.playWhenReady==true) "暂停" else "播放",selected=true) { togglePlayback() }.apply { tag="player:transport" }
@@ -1022,6 +1021,10 @@ class MainActivity: Activity() {
             }
         }
         return super.dispatchKeyEvent(event)
+    }
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if(hasFocus) window.decorView.systemUiVisibility=View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
     }
     override fun onSaveInstanceState(outState: Bundle) { if(::browser.isInitialized) browser.save(outState);super.onSaveInstanceState(outState) }
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {

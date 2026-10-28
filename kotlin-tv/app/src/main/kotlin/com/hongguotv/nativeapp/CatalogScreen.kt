@@ -15,7 +15,10 @@ class CatalogScreen(context: Context,private val state: CatalogUiState,sidebar: 
     init {
         orientation=VERTICAL;clipChildren=false
         val heading=ui.heading(state.query.type.label);heading.addView(BrowseButton(context,"搜索剧名",BrowseButton.Role.SEARCH,action=search));addView(heading,LayoutParams(-1,-2).apply { bottomMargin=ui.dp(8) })
-        addView(controls);addView(grid,LayoutParams(-1,0,1f));addView(status,LayoutParams(-1,-2))
+        addView(object: ScrollView(context) {
+            init { isVerticalScrollBarEnabled=false;clipToPadding=false;addView(controls) }
+            override fun onMeasure(w: Int,h: Int) { super.onMeasure(w,MeasureSpec.makeMeasureSpec(ui.dp(if(BrowseLayout.compact(TvStyle.windowDp(context))) 96 else 220),MeasureSpec.AT_MOST)) }
+        });addView(grid,LayoutParams(-1,0,1f));addView(status,LayoutParams(-1,-2))
         grid.bottomTarget=status.actionView;renderControls();update(true)
         sidebar.nextFocusRightId=grid.id
     }

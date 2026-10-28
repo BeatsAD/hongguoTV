@@ -15,10 +15,12 @@ class PosterCardView(context: Context): LinearLayout(context) {
     val image=ImageView(context).apply { scaleType=ImageView.ScaleType.CENTER_CROP; importantForAccessibility=IMPORTANT_FOR_ACCESSIBILITY_NO }
     private val poster=FrameLayout(context).apply { background=TvStyle.shape(context,TvStyle.surface,radius=8); clipToOutline=true }
     private val chips=LinearLayout(context).apply { orientation=HORIZONTAL; clipChildren=true }
-    private val count=label(10f).apply { setPadding(dp(4),dp(2),dp(4),dp(2)); background=TvStyle.shape(context,0xB3000000.toInt(),radius=3) }
-    private val title=label(13f).apply { maxLines=1; ellipsize=TextUtils.TruncateAt.END; setPadding(0,dp(5),0,dp(3)) }
-    private val subtitle=label(10f,TvStyle.muted).apply { maxLines=1; ellipsize=TextUtils.TruncateAt.END }
+    private val count=label(12f).apply { setPadding(dp(4),dp(2),dp(4),dp(2)); background=TvStyle.shape(context,0xB3000000.toInt(),radius=3) }
+    private val title=label(14f).apply { maxLines=1; ellipsize=TextUtils.TruncateAt.END; setPadding(0,dp(5),0,dp(3)) }
+    private val subtitle=label(12f,TvStyle.muted).apply { maxLines=1; ellipsize=TextUtils.TruncateAt.END }
     private val progress=ProgressBar(context,null,android.R.attr.progressBarStyleHorizontal).apply { max=1000; progressTintList=android.content.res.ColorStateList.valueOf(TvStyle.accent); progressBackgroundTintList=android.content.res.ColorStateList.valueOf(0x66000000) }
+    internal var maxPosterHeight: Int=Int.MAX_VALUE
+        set(value) { if(field!=value) { field=value;requestLayout() } }
     private var names=emptyList<String>()
     private var fitted=""
     private fun label(size: Float,color: Int=TvStyle.text)=TextView(context).apply { textSize=size;setTextColor(color);includeFontPadding=false }
@@ -46,16 +48,18 @@ class PosterCardView(context: Context): LinearLayout(context) {
         fitted=key
         chips.removeAllViews(); var used=0
         names.forEach { name ->
-            val chip=label(9f).apply { text=name;setPadding(dp(4),dp(2),dp(4),dp(2));background=TvStyle.shape(context,0xB3000000.toInt(),radius=3);maxLines=1 }
+            val chip=label(11f).apply { text=name;setPadding(dp(4),dp(2),dp(4),dp(2));background=TvStyle.shape(context,0xB3000000.toInt(),radius=3);maxLines=1 }
             val width=kotlin.math.ceil(chip.paint.measureText(name)).toInt()+dp(8)
             if(used+width<=available) { chips.addView(chip,LayoutParams(width,-2).apply { rightMargin=dp(3) });used+=width+dp(3) }
         }
     }
     override fun onMeasure(widthMeasureSpec: Int,heightMeasureSpec: Int) {
         val w=View.MeasureSpec.getSize(widthMeasureSpec)-paddingLeft-paddingRight
-        val height=(w/TvStyle.POSTER_ASPECT).toInt()
+        val height=minOf((w/TvStyle.POSTER_ASPECT).toInt(),maxPosterHeight)
+        val posterWidth=minOf(w,(height*TvStyle.POSTER_ASPECT).toInt())
+        if(poster.layoutParams.width!=posterWidth) poster.layoutParams=poster.layoutParams.apply { width=posterWidth;(this as LayoutParams).gravity=Gravity.CENTER_HORIZONTAL }
         if(poster.layoutParams.height!=height) poster.layoutParams=poster.layoutParams.apply { this.height=height }
-        fitTags(w-dp(8))
+        fitTags(posterWidth-dp(8))
         super.onMeasure(widthMeasureSpec,heightMeasureSpec)
     }
 }
