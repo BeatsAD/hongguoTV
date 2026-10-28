@@ -3,6 +3,15 @@ package com.hongguotv.core
 
 data class RankQuery(val top: String="all",val sub: String="",val panel: List<String> = emptyList()) {
     val fingerprint get()="$top/$sub/${panel.sorted().joinToString(",")}"
+    fun choose(row: FilterDimension,id: String?,globalSingle: Boolean): RankQuery {
+        // The upstream empty-ID option (总榜) means no filter, not a selected ID.
+        if(id.isNullOrEmpty()) return copy(panel=if(globalSingle) emptyList() else panel.filter { current -> row.options.none { it.id==current } })
+        require(row.options.any { it.id==id })
+        val selected=if(globalSingle) listOf(id) else if(row.multiple) {
+            if(id in panel) panel-id else panel+id
+        } else panel.filter { current -> row.options.none { it.id==current } }+id
+        return copy(panel=selected)
+    }
 }
 data class RankCursor(val offset: Int,val session: String,val fingerprint: String)
 data class RankBoard(val id: String,val label: String,val selected: Boolean,val subtitle: String,val panel: List<FilterDimension>,val globalSingle: Boolean)

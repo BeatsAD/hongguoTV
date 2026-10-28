@@ -16,8 +16,8 @@ class FilterPanelView(context: Context,rows: List<FilterDimension>,selected: Map
             val line=ui.row().apply { gravity=android.view.Gravity.TOP }
             line.addView(ui.text(row.label,12f,TvStyle.muted).apply { setPadding(0,ui.dp(7),0,0) },LinearLayout.LayoutParams(ui.dp(50),-2))
             val options=BrowseFlow(context,5)
-            options.addView(BrowseButton(context,"全部",BrowseButton.Role.FILTER,selected[row.id].isNullOrEmpty()) { choose(row,null) }.apply { tag="filter:${row.id}:all";if(forceSingle || !row.multiple) autoSelect(RemoteFocus.NETWORK_DELAY) })
-            row.options.forEach { option -> options.addView(BrowseButton(context,option.label,BrowseButton.Role.FILTER,option.id in selected[row.id].orEmpty()) { choose(row,option.id) }.apply { tag="filter:${row.id}:${option.id}";if(forceSingle || !row.multiple) autoSelect(RemoteFocus.NETWORK_DELAY) }) }
+            if(row.options.none { it.id.isEmpty() }) options.addView(BrowseButton(context,"全部",BrowseButton.Role.FILTER,selected[row.id].isNullOrEmpty()) { choose(row,null) }.apply { tag="filter:${row.id}:all";if(forceSingle || !row.multiple) autoSelect(RemoteFocus.NETWORK_DELAY) })
+            row.options.forEach { option -> options.addView(BrowseButton(context,option.label,BrowseButton.Role.FILTER,if(option.id.isEmpty()) selected[row.id].isNullOrEmpty() else option.id in selected[row.id].orEmpty()) { choose(row,option.id.takeIf { it.isNotEmpty() }) }.apply { tag="filter:${row.id}:${option.id}";if(forceSingle || !row.multiple) autoSelect(RemoteFocus.NETWORK_DELAY) }) }
             line.addView(options,LinearLayout.LayoutParams(0,-2,1f))
             body.addView(line,LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=ui.dp(8) })
         }

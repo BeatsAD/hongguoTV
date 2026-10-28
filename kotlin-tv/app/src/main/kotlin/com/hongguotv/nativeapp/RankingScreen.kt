@@ -47,12 +47,8 @@ class RankingScreen(context: Context,private val state: RankingUiState,private v
         val row=ui.row();row.addView(ui.text(board?.subtitle.orEmpty(),11f,TvStyle.muted),LayoutParams(0,-2,1f))
         if(!board?.panel.isNullOrEmpty()) row.addView(BrowseButton(context,if(state.expanded) "收起分类" else "分类筛选",BrowseButton.Role.FILTER,state.query.panel.isNotEmpty()) { state.expanded=!state.expanded;renderControls();controls.findViewWithTag<View>("panel")?.requestFocus() }.apply { tag="panel" })
         if(row.childCount>1 || board?.subtitle.orEmpty().isNotBlank()) controls.addView(row,LayoutParams(-1,-2).apply { bottomMargin=ui.dp(6) })
-        if(state.expanded && board!=null) controls.addView(FilterPanelView(context,board.panel,board.panel.associate { dim -> dim.id to state.query.panel },forceSingle=board.globalSingle) { dimension,id ->
-            val selected=if(id==null) emptyList() else if(board.globalSingle) listOf(id) else {
-                val other=state.query.panel.filter { current -> dimension.options.none { it.id==current } }
-                if(dimension.multiple) if(id in state.query.panel) state.query.panel-id else state.query.panel+id else other+id
-            }
-            change(state.query.copy(panel=selected))
+        if(state.expanded && board!=null) controls.addView(FilterPanelView(context,board.panel,board.panel.associate { dim -> dim.id to if(board.globalSingle) state.query.panel else state.query.panel.filter { id -> dim.options.any { it.id==id } } },forceSingle=board.globalSingle) { dimension,id ->
+            change(state.query.choose(dimension,id,board.globalSingle))
         },LayoutParams(-1,ui.dp(if(BrowseLayout.compact(TvStyle.windowDp(context))) 90 else 150)))
         RemoteFocus.restore(controls,focus)
     }
