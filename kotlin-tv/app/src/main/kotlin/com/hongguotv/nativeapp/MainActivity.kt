@@ -322,12 +322,6 @@ class MainActivity: Activity() {
 
     private fun settings(parent: LinearLayout) {
         pageTitle(parent,"设置")
-        val identity=row().apply { setPadding(0,0,0,dp(16)) }
-        identity.addView(ImageView(this).apply { setImageResource(R.drawable.app_icon);scaleType=ImageView.ScaleType.FIT_CENTER },lp(dp(44),dp(44)).apply { rightMargin=dp(14) })
-        val identityCopy=column(); identityCopy.addView(text("红果 TV",20f)); identityCopy.addView(text("你的故事，按你的习惯播放。",12f,muted).apply { setPadding(0,dp(6),0,0) })
-        identity.addView(identityCopy,lp(0,-2).apply { weight=1f })
-        identity.addView(text(BuildConfig.VERSION_NAME,12f,muted)); parent.addView(identity)
-        parent.addView(View(this).apply { setBackgroundColor(TvStyle.outline) },lp(-1,dp(1)).apply { bottomMargin=dp(18) })
         val groups=column()
         val playback=column(); val device=column(); val about=column()
         listOf(playback,device,about).forEach { group ->
