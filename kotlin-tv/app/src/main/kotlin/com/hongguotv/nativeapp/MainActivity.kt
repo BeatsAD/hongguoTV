@@ -9,6 +9,7 @@ import android.os.Looper
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.InsetDrawable
 import android.view.*
 import android.view.inputmethod.InputMethodManager
 import android.content.Context
@@ -322,16 +323,15 @@ class MainActivity: Activity() {
     private fun settings(parent: LinearLayout) {
         pageTitle(parent,"设置")
         val identity=row().apply { setPadding(0,0,0,dp(16)) }
-        identity.addView(ImageView(this).apply { setImageResource(R.drawable.app_icon) },lp(dp(44),dp(44)).apply { rightMargin=dp(14) })
+        identity.addView(ImageView(this).apply { setImageResource(R.drawable.app_icon);scaleType=ImageView.ScaleType.FIT_CENTER },lp(dp(44),dp(44)).apply { rightMargin=dp(14) })
         val identityCopy=column(); identityCopy.addView(text("红果 TV",20f)); identityCopy.addView(text("你的故事，按你的习惯播放。",12f,muted).apply { setPadding(0,dp(6),0,0) })
         identity.addView(identityCopy,lp(0,-2).apply { weight=1f })
         identity.addView(text(BuildConfig.VERSION_NAME,12f,muted)); parent.addView(identity)
         parent.addView(View(this).apply { setBackgroundColor(TvStyle.outline) },lp(-1,dp(1)).apply { bottomMargin=dp(18) })
-        val stacked=widthDp()<800 || resources.configuration.fontScale>1.25f
-        val groups=LinearLayout(this).apply { orientation=if(stacked) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL; gravity=Gravity.TOP }
-        val playback=column(); val device=column()
-        listOf(playback,device).forEachIndexed { i,group ->
-            groups.addView(group,lp(if(stacked) -1 else 0,-2).apply { if(!stacked) { weight=1f; if(i==0) rightMargin=dp(22) } else bottomMargin=dp(20) })
+        val groups=column()
+        val playback=column(); val device=column(); val about=column()
+        listOf(playback,device,about).forEach { group ->
+            groups.addView(group,lp(-1,-2).apply { bottomMargin=dp(20) })
         }
         parent.addView(groups)
         val panels=mutableMapOf<LinearLayout,LinearLayout>()
@@ -362,7 +362,9 @@ class MainActivity: Activity() {
             text="自动连播"; isChecked=library.autoNext; focusStyle(this); background=rounded(Color.TRANSPARENT)
             setOnFocusChangeListener { _,f -> background=rounded(if(f) TvStyle.raised else Color.TRANSPARENT,if(f) white else Color.TRANSPARENT) }
             switchMinWidth=dp(44)
-            thumbDrawable=GradientDrawable().apply { shape=GradientDrawable.OVAL; setColor(white); setSize(dp(20),dp(20)) }
+            // Native Switch stretches its thumb bounds to the track height. Equal outer
+            // dimensions plus an inset keep the visible thumb circular at every density.
+            thumbDrawable=InsetDrawable(GradientDrawable().apply { shape=GradientDrawable.OVAL; setColor(white); setSize(dp(20),dp(20)) },dp(3))
             trackDrawable=TvStyle.shape(this@MainActivity,surface,radius=100).apply { setSize(dp(44),dp(26)) }
             thumbTintList=android.content.res.ColorStateList.valueOf(white)
             trackTintList=android.content.res.ColorStateList(arrayOf(intArrayOf(android.R.attr.state_checked),intArrayOf()),intArrayOf(Color.rgb(52,199,89),TvStyle.outline))
@@ -385,24 +387,22 @@ class MainActivity: Activity() {
             library.unhideAll(); hidden.text="恢复隐藏推荐  ·  0 部"; Toast.makeText(this,"热门推荐已恢复",Toast.LENGTH_SHORT).show()
         }
         device.addView(text("收藏与观看进度保存在本机。",12f,muted).apply { setPadding(dp(14),dp(12),0,dp(25)) })
-        heading(device,"关于")
+        heading(about,"关于")
         lateinit var updates: TextView
-        updates=setting(device,"${if(BuildConfig.DEBUG) "应用版本" else "版本与更新"}  ${BuildConfig.VERSION_NAME}") { updater.show(updates) }
+        updates=setting(about,"${if(BuildConfig.DEBUG) "应用版本" else "版本与更新"}  ${BuildConfig.VERSION_NAME}") { updater.show(updates) }
         lateinit var license: TextView
-        license=setting(device,"开源许可") { tvTools.info("开源许可","本原生版以 GPL-3.0 发布。\n内容协议与加密处理移植自 drpys（22261ad）。\nAndroidX Media3 / OkHttp：Apache-2.0\nKotlin：Apache-2.0\nBouncy Castle：MIT\n完整源码和许可证见 GitHub：N3urda/hongguoTV-updates。",license) }
-        val left=listOf(qualityButton,defaultSpeed,frame,autoNextButton); val right=listOf(backup,hidden,updates,license)
-        listOf(left,right).forEach { items -> items.forEachIndexed { index,view ->
+        license=setting(about,"开源许可") { tvTools.info("开源许可","本原生版以 GPL-3.0 发布。\n内容协议与加密处理移植自 drpys（22261ad）。\nAndroidX Media3 / OkHttp：Apache-2.0\nKotlin：Apache-2.0\nBouncy Castle：MIT\n完整源码和许可证见 GitHub：N3urda/hongguoTV-updates。",license) }
+        val items=listOf(qualityButton,defaultSpeed,frame,autoNextButton,backup,hidden,updates,license)
+        items.forEachIndexed { index,view ->
             view.nextFocusUpId=items.getOrNull(index-1)?.id ?: nav[tab].id
             view.nextFocusDownId=items.getOrNull(index+1)?.id ?: view.id
-        } }
-        left.forEachIndexed { i,v -> v.nextFocusLeftId=nav[tab].id; v.nextFocusRightId=right[i].id }
-        right.forEachIndexed { i,v -> v.nextFocusLeftId=left[i].id; v.nextFocusRightId=v.id }
-        if(stacked) {
-            (left+right).forEach { it.nextFocusLeftId=nav[tab].id; it.nextFocusRightId=it.id }
-            left.last().nextFocusDownId=right.first().id; right.first().nextFocusUpId=left.last().id
+            view.nextFocusLeftId=nav[tab].id;view.nextFocusRightId=view.id
+        }
+        qualityButton.setOnKeyListener { _,key,event ->
+            if(key==KeyEvent.KEYCODE_DPAD_UP && event.action==KeyEvent.ACTION_DOWN) { nav[tab].requestFocus();true } else false
         }
         nav.forEach { it.nextFocusDownId=qualityButton.id }
-        device.addView(text(if(BuildConfig.DEBUG) "开发测试版通过本地安装更新。" else "确认系统安装后更新，保留本机记录。",12f,muted).apply { setPadding(dp(14),dp(12),0,0) })
+        about.addView(text(if(BuildConfig.DEBUG) "开发测试版通过本地安装更新。" else "确认系统安装后更新，保留本机记录。",12f,muted).apply { setPadding(dp(14),dp(12),0,0) })
         nav[tab].requestFocus()
     }
 

@@ -22,7 +22,7 @@ class PreferenceRow(context: Context,label: String,kind: TvGlyph.Kind): TextView
     override fun onDraw(canvas: Canvas) {
         val center=height/2f
         canvas.drawRoundRect(dp(15),center-dp(14),dp(43),center+dp(14),dp(8),dp(8),badge)
-        glyph.setBounds(dp(21).toInt(),(center-dp(8)).toInt(),dp(37).toInt(),(center+dp(8)).toInt()); glyph.draw(canvas)
+        glyph.setBounds(dp(20).toInt(),(center-dp(9)).toInt(),dp(38).toInt(),(center+dp(9)).toInt()); glyph.draw(canvas)
         chevron.setBounds((width-dp(25)).toInt(),(center-dp(6)).toInt(),(width-dp(13)).toInt(),(center+dp(6)).toInt()); chevron.draw(canvas)
         val value=text.toString().removePrefix(title).trim().trimStart('·').trim()
         ink.typeface=Typeface.create("sans-serif",Typeface.NORMAL); ink.textSize=13*resources.displayMetrics.scaledDensity; ink.color=TvStyle.muted
@@ -47,7 +47,7 @@ class PreferenceSwitch(context: Context): Switch(context) {
     override fun onDraw(canvas: Canvas) {
         val center=height/2f
         canvas.drawRoundRect(dp(15),center-dp(14),dp(43),center+dp(14),dp(8),dp(8),badge)
-        glyph.setBounds(dp(21).toInt(),(center-dp(8)).toInt(),dp(37).toInt(),(center+dp(8)).toInt()); glyph.draw(canvas)
+        glyph.setBounds(dp(20).toInt(),(center-dp(9)).toInt(),dp(38).toInt(),(center+dp(9)).toInt()); glyph.draw(canvas)
         super.onDraw(canvas)
     }
 }
