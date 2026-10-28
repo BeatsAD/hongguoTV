@@ -116,7 +116,7 @@ class AppUpdater(private val activity: Activity, private val idle: () -> Boolean
             }
         })
         body.addView(TextView(activity).apply {
-            text = "只在应用前台浏览时检查，播放中不打扰。下载后需确认系统安装，收藏与观看记录保留。"; textSize = 13f; setTextColor(TvStyle.muted)
+            text = "只在应用前台浏览时检查，播放中不打扰。下载后需确认系统安装，收藏与观看记录保留。"; textSize = 14f; setTextColor(TvStyle.muted)
             setPadding(0, (8*dp).toInt(), 0, (8*dp).toInt())
         })
         val next = AlertDialog.Builder(activity).setTitle("版本与更新 · ${BuildConfig.VERSION_NAME}").setView(ScrollView(activity).apply { addView(body) })

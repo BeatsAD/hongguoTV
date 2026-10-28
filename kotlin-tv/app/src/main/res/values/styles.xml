@@ -1,1 +1,24 @@
-<resources><style name="AppTheme" parent="android:style/Theme.Material.NoActionBar"><item name="android:fontFamily">sans</item><item name="android:alertDialogTheme">@style/TvDialogTheme</item><item name="android:windowActionModeOverlay">true</item><item name="android:colorAccent">#F3F4F6</item><item name="android:windowBackground">#0B0C0F</item><item name="android:windowLightStatusBar">false</item><item name="android:windowNoTitle">true</item><item name="android:colorBackgroundFloating">#242529</item></style><style name="TvDialogTheme" parent="android:style/Theme.Material.Dialog.Alert"><item name="android:windowBackground">@drawable/dialog_surface</item><item name="android:colorAccent">#F3F4F6</item><item name="android:textColorPrimary">#F3F4F6</item><item name="android:textColorSecondary">#A0A1AA</item><item name="android:backgroundDimAmount">0.72</item><item name="android:windowMinWidthMajor">45%</item></style></resources>
+<resources>
+    <style name="AppTheme" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:alertDialogTheme">@style/TvDialogTheme</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:colorAccent">#D58098</item>
+        <item name="android:windowBackground">#101114</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:colorBackgroundFloating">#202127</item>
+        <item name="android:textColorPrimary">#F5F3F2</item>
+        <item name="android:textColorSecondary">#AEB0BA</item>
+        <item name="android:colorButtonNormal">#25262C</item>
+    </style>
+    <style name="TvDialogTheme" parent="android:style/Theme.Material.Dialog.Alert">
+        <item name="android:windowBackground">@drawable/dialog_surface</item>
+        <item name="android:colorAccent">#D58098</item>
+        <item name="android:textColorPrimary">#F5F3F2</item>
+        <item name="android:textColorSecondary">#AEB0BA</item>
+        <item name="android:colorButtonNormal">#25262C</item>
+        <item name="android:backgroundDimAmount">0.72</item>
+        <item name="android:windowMinWidthMajor">45%</item>
+    </style>
+</resources>

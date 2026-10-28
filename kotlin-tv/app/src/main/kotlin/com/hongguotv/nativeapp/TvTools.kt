@@ -54,8 +54,8 @@ class TvTools(private val activity: Activity) {
         override fun getView(position: Int,convertView: View?,parent: ViewGroup): View {
             val label=labels[position].replace(" · ","\n")
             return CheckedTextView(activity).apply {
-                text=label; textSize=15f; setTextColor(TvStyle.text); gravity=Gravity.CENTER_VERTICAL
-                minHeight=dp(54); setPadding(dp(18),dp(14),dp(18),dp(14)); maxLines=3; isChecked=position==selected; checkMarkDrawable=null
+                text=label; textSize=16f; setTextColor(TvStyle.text); gravity=Gravity.CENTER_VERTICAL
+                minHeight=dp(52); setPadding(dp(18),dp(14),dp(18),dp(14)); maxLines=3; isChecked=position==selected; checkMarkDrawable=null
                 if(position==selected) setCompoundDrawables(null,null,TvGlyph(TvGlyph.Kind.CHECK).apply { setBounds(0,0,dp(18),dp(18)) },null)
                 if(label.contains('\n')) {
                     val secondary=label.indexOf('\n')+1
@@ -80,9 +80,7 @@ class TvTools(private val activity: Activity) {
             keys.forEach { key ->
                 val button=Button(activity).apply {
                     id=View.generateViewId(); text=key; minHeight=dp(42)
-                    val states=arrayOf(intArrayOf(android.R.attr.state_focused),intArrayOf())
-                    backgroundTintList=android.content.res.ColorStateList(states,intArrayOf(TvStyle.text,TvStyle.raised))
-                    setTextColor(android.content.res.ColorStateList(states,intArrayOf(TvStyle.background,TvStyle.text)))
+                    TvStyle.bind(this);minHeight=dp(44);minWidth=dp(44)
                     setOnClickListener { when(key) { "清空"->{ digits="";replace=false;value.text="—" }; "退格"->erase(); else->digit(key) } }
                 }
                 buttons+=button

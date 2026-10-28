@@ -14,21 +14,21 @@ internal class HomeHeader(context: Context,sidebar: View,refreshHome: ()->Unit,s
     val refresh=BrowseButton(context,"刷新",BrowseButton.Role.TEXT,action=refreshHome).apply {
         tag="home:refresh"
         setCompoundDrawables(context.getDrawable(R.drawable.ic_refresh)?.apply {
-            setTint(TvStyle.muted);setBounds(0,0,ui.dp(15),ui.dp(15))
+            setTint(TvStyle.muted);setBounds(0,0,ui.dp(20),ui.dp(20))
         },null,null,null)
-        compoundDrawablePadding=ui.dp(5)
+        compoundDrawablePadding=ui.dp(8)
         contentDescription="刷新首页"
     }
     val search=BrowseButton(context,"搜索剧名",BrowseButton.Role.SEARCH,action=searchHome).apply { tag="home:search" }
-    private val status=ui.text("",11f,TvStyle.muted).apply {
+    private val status=ui.text("",12f,TvStyle.muted).apply {
         maxLines=1;ellipsize=TextUtils.TruncateAt.END
         accessibilityLiveRegion=View.ACCESSIBILITY_LIVE_REGION_POLITE
         minimumHeight=ui.dp(18)
     }
     init {
         orientation=VERTICAL
-        val heading=ui.heading("首页",22f)
-        heading.addView(refresh,LayoutParams(ui.dp(90),-2).apply { rightMargin=ui.dp(10) })
+        val heading=ui.heading("首页",24f)
+        heading.addView(refresh,LayoutParams(-2,-2).apply { rightMargin=ui.dp(10) })
         heading.addView(search,LayoutParams(ui.dp(if(BrowseLayout.compact(TvStyle.windowDp(context))) 130 else 160),-2))
         addView(heading,LayoutParams(-1,-2));addView(status,LayoutParams(-1,-2))
         listOf(refresh,search).forEach { button ->

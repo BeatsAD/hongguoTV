@@ -14,7 +14,10 @@ class RankingScreen(context: Context,private val state: RankingUiState,private v
         val entry=state.entries.firstOrNull { it.id==series.id };if(entry is RankEntry.Drama && entry.series.playable) actions(series,view) else entry?.let(open)
     },{ if(state.error.isBlank()) append() })
     private val status=BrowseStatus(context) { append() }
-    init { orientation=VERTICAL;val heading=ui.heading("榜单");heading.addView(BrowseButton(context,"刷新",BrowseButton.Role.TEXT) { change(state.query) });addView(heading,LayoutParams(-1,-2).apply { bottomMargin=ui.dp(6) });addView(controls);addView(grid,LayoutParams(-1,0,1f));addView(status,LayoutParams(-1,-2));grid.bottomTarget=status.actionView;renderControls();update(true) }
+    init { orientation=VERTICAL;val heading=ui.heading("榜单");heading.addView(BrowseButton(context,"刷新",BrowseButton.Role.TEXT) { change(state.query) });addView(heading,LayoutParams(-1,-2).apply { bottomMargin=ui.dp(6) });addView(object: ScrollView(context) {
+            init { isVerticalScrollBarEnabled=false;clipToPadding=false;addView(controls) }
+            override fun onMeasure(w: Int,h: Int) { super.onMeasure(w,MeasureSpec.makeMeasureSpec(ui.dp(if(BrowseLayout.compact(TvStyle.windowDp(context))) 96 else 220),MeasureSpec.AT_MOST)) }
+        });addView(grid,LayoutParams(-1,0,1f));addView(status,LayoutParams(-1,-2));grid.bottomTarget=status.actionView;renderControls();update(true) }
     fun renderControls() {
         val focus=RemoteFocus.capture(controls);controls.removeAllViews()
         ui.line(controls,state.groups.sortedBy { listOf("all","comic_series_rank","human","ai_playlet","series_album","ranklist_celebrity").indexOf(it.id).let { index -> if(index<0) Int.MAX_VALUE else index } }.map { group -> BrowseButton(context,group.label,BrowseButton.Role.TAB,state.query.top==group.id) {

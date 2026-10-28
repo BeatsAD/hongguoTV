@@ -49,7 +49,7 @@ class HomeScreen(context: Context,private val top: View,private val loadCover: (
         contents.removeAllViews();rows.clear();requestedArtwork.clear()
         shelves.filter { it.entries.isNotEmpty() || it.more!=null }.forEach { shelf ->
             val block=ui.column(); val heading=ui.row()
-            heading.addView(ui.text(shelf.title,16f).apply { typeface=android.graphics.Typeface.create("sans-serif-medium",android.graphics.Typeface.NORMAL) },LayoutParams(0,-2,1f))
+            heading.addView(ui.text(shelf.title,18f).apply { typeface=android.graphics.Typeface.create("sans-serif-medium",android.graphics.Typeface.NORMAL) },LayoutParams(0,-2,1f))
             val horizontal=HorizontalScrollView(context).apply {
                 isHorizontalScrollBarEnabled=false;clipToPadding=false
                 setOnScrollChangeListener { _,_,_,_,_->scheduleArtwork() }
@@ -66,10 +66,10 @@ class HomeScreen(context: Context,private val top: View,private val loadCover: (
                 val current=cards.indexOfFirst { it.hasFocus() }.takeIf { it>=0 } ?: (horizontal.scrollX/(cards.firstOrNull()?.width?.plus(ui.dp(12)) ?: 1).coerceAtLeast(1))
                 cards.getOrNull((current+direction*count).coerceIn(0,(cards.size-1).coerceAtLeast(0)))?.requestFocus()
             }
-            val previous=BrowseButton(context,"",BrowseButton.Role.TEXT) { page(-1) }.leadingIcon(TvGlyph.Kind.BACK).apply { tag="${shelf.key}:previous";contentDescription="上一屏${shelf.title}";minimumWidth=ui.dp(29) }
-            val next=BrowseButton(context,"",BrowseButton.Role.TEXT) { page(1) }.leadingIcon(TvGlyph.Kind.NEXT).apply { tag="${shelf.key}:next";contentDescription="下一屏${shelf.title}";minimumWidth=ui.dp(29) }
+            val previous=BrowseButton(context,"",BrowseButton.Role.TEXT) { page(-1) }.leadingIcon(TvGlyph.Kind.BACK).apply { tag="${shelf.key}:previous";contentDescription="上一屏${shelf.title}";minWidth=ui.dp(44) }
+            val next=BrowseButton(context,"",BrowseButton.Role.TEXT) { page(1) }.leadingIcon(TvGlyph.Kind.NEXT).apply { tag="${shelf.key}:next";contentDescription="下一屏${shelf.title}";minWidth=ui.dp(44) }
             heading.addView(indicator);heading.addView(previous);heading.addView(next)
-            val all=BrowseButton(context,if(shelf.key=="resume") "全部记录" else "全部${shelf.title}",BrowseButton.Role.TEXT) { shelf.more?.invoke() }.trailingIcon(TvGlyph.Kind.NEXT).apply { tag="${shelf.key}:all";textSize=12f }
+            val all=BrowseButton(context,if(shelf.key=="resume") "全部记录" else "全部${shelf.title}",BrowseButton.Role.TEXT) { shelf.more?.invoke() }.trailingIcon(TvGlyph.Kind.NEXT).apply { tag="${shelf.key}:all";textSize=14f }
             heading.addView(all,LayoutParams(-2,-2).apply { leftMargin=ui.dp(16) })
             block.addView(heading,LayoutParams(-1,-2).apply { bottomMargin=ui.dp(6) })
             val status=ui.text(shelf.status,11f,TvStyle.muted).apply { visibility=if(shelf.status.isBlank()) GONE else VISIBLE }
@@ -139,7 +139,7 @@ class HomeScreen(context: Context,private val top: View,private val loadCover: (
     private fun fit() {
         if(width<=0) return
         val count=TvStyle.homeColumns(context);val w=(width-ui.dp(12)*(count-1))/count
-        rows.forEach { row -> row.cards.forEach { it.layoutParams=it.layoutParams.apply { width=w } };updateTools(row,row.cards.indexOfFirst { it.hasFocus() }.coerceAtLeast(0)) }
+        rows.forEach { row -> row.cards.forEach { it.maxPosterHeight=(scroll.height-ui.dp(48)-(ui.dp(42)*resources.configuration.fontScale).toInt()).coerceAtLeast(ui.dp(100));it.layoutParams=it.layoutParams.apply { width=w } };updateTools(row,row.cards.indexOfFirst { it.hasFocus() }.coerceAtLeast(0)) }
     }
     private fun updateTools(row: Row,index: Int) {
         val count=TvStyle.homeColumns(context)
@@ -176,5 +176,5 @@ class HomeScreen(context: Context,private val top: View,private val loadCover: (
         (cards.firstOrNull { it.tag==lastFocus } ?: cards.firstOrNull { it.image.getGlobalVisibleRect(visible) }
             ?: cards.firstOrNull() ?: header?.refresh)?.requestFocus()
     }
-    override fun onSizeChanged(w: Int,h: Int,oldw: Int,oldh: Int) { super.onSizeChanged(w,h,oldw,oldh);if(w!=oldw) post { fit();scheduleArtwork() } }
+    override fun onSizeChanged(w: Int,h: Int,oldw: Int,oldh: Int) { super.onSizeChanged(w,h,oldw,oldh);if(w!=oldw || h!=oldh) post { fit();scheduleArtwork() } }
 }

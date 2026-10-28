@@ -34,6 +34,7 @@ class PosterGridView(context: Context,private val columns: Int,private val sideb
         override fun onCreateViewHolder(parent: ViewGroup,viewType: Int)=Holder(PosterCardView(context).apply { layoutParams=LayoutParams(-1,-2) })
         override fun onBindViewHolder(holder: Holder,position: Int) {
             val item=rows[position];val card=holder.card
+            if(height>0) card.maxPosterHeight=posterLimit(height)
             card.bind(item.series,item.caption,item.fraction);card.tag=item.series.id
             card.setOnClickListener { open(rows[holder.bindingAdapterPosition.takeIf { it in rows.indices } ?: return@setOnClickListener].series) }
             card.setOnLongClickListener { actions(item.series,card);true }
@@ -65,12 +66,18 @@ class PosterGridView(context: Context,private val columns: Int,private val sideb
         addItemDecoration(object: ItemDecoration() { override fun getItemOffsets(out: Rect,view: View,parent: RecyclerView,state: State) { out.set(gap,gap,gap,gap) } })
         addOnScrollListener(object: OnScrollListener() { override fun onScrolled(view: RecyclerView,dx: Int,dy: Int) { if(dy>0 && manager.findLastVisibleItemPosition()>=rows.size-columns*2) append() } })
     }
+    private fun posterLimit(height: Int)=(height-(52*resources.displayMetrics.density*resources.configuration.fontScale).toInt()).coerceAtLeast((80*resources.displayMetrics.density).toInt())
+    override fun onSizeChanged(w: Int,h: Int,oldw: Int,oldh: Int) {
+        super.onSizeChanged(w,h,oldw,oldh)
+        for(i in 0 until childCount) (getChildAt(i) as? PosterCardView)?.maxPosterHeight=posterLimit(h)
+    }
     private fun move(index: Int) { rows.getOrNull(index)?.let { desired=it.series.id;scrollToPosition(index);post { manager.findViewByPosition(index)?.requestFocus()?.also { desired=null } } } }
     // LayoutManager offsets are relative to the padded start, using decorated card bounds.
     fun capture()=Anchor(focusId,manager.findFirstVisibleItemPosition().coerceAtLeast(0),manager.findViewByPosition(manager.findFirstVisibleItemPosition())?.let { manager.getDecoratedTop(it)-paddingTop } ?: 0,hasFocus())
     fun submit(next: List<Item>,anchor: Anchor?=null) {
         val saved=anchor ?: capture();val oldCount=rows.size
         rows=next
+        focusId=saved.id.takeIf { id -> rows.any { it.series.id==id } }.orEmpty()
         val isAppend=oldCount>0 && oldCount<=next.size && (0 until oldCount).all { i -> cardsSnapshot.getOrNull(i)==next[i] }
         if(isAppend) { if(next.size>oldCount) cards.notifyItemRangeInserted(oldCount,next.size-oldCount) } else cards.notifyDataSetChanged()
         cardsSnapshot=next
@@ -86,5 +93,5 @@ class PosterGridView(context: Context,private val columns: Int,private val sideb
         pendingDown?.let { index -> if(next.size>oldCount) { if(hasFocus()) move((index+columns).coerceAtMost(next.lastIndex));pendingDown=null } }
     }
     private var cardsSnapshot=emptyList<Item>()
-    fun focusFirst(): Boolean { if(rows.isEmpty()) return false;move(0);return true }
+    fun focusFirst(): Boolean { if(rows.isEmpty()) return false;move(rows.indexOfFirst { it.series.id==focusId }.coerceAtLeast(0));return true }
 }

@@ -16,16 +16,16 @@ class SidebarButton(context: Context,value: String,kind: TvGlyph.Kind,selected: 
     init {
         val density=resources.displayMetrics.density
         fun dp(n: Int)=(n*density).toInt()
-        id=View.generateViewId();text=value;textSize=14f;includeFontPadding=false;isFocusable=true;isFocusableInTouchMode=true;isSelected=selected;gravity=Gravity.CENTER_VERTICAL
-        minHeight=dp(33);maxLines=1
-        setPadding(dp(8),dp(8),dp(4),dp(8));setTextColor(if(selected) TvStyle.text else 0xFFC2C3CC.toInt());compoundDrawablePadding=dp(11)
-        setCompoundDrawables(TvGlyph(kind,filled=selected && kind==TvGlyph.Kind.HOME).apply { setBounds(0,0,dp(17),dp(17)) },null,null,null)
+        id=View.generateViewId();text=value;textSize=16f;includeFontPadding=false;isFocusable=true;isFocusableInTouchMode=true;isSelected=selected;gravity=Gravity.CENTER_VERTICAL
+        minHeight=dp(44);maxLines=1;typeface=android.graphics.Typeface.create("sans-serif-medium",android.graphics.Typeface.NORMAL)
+        setPadding(dp(8),dp(8),dp(4),dp(8));setTextColor(if(selected) TvStyle.text else TvStyle.muted);compoundDrawablePadding=dp(11)
+        setCompoundDrawables(TvGlyph(kind,filled=selected && kind==TvGlyph.Kind.HOME).apply { setBounds(0,0,dp(22),dp(22)) },null,null,null)
         fun paint() {
-            setTextColor(if(isSelected) TvStyle.text else 0xFFC2C3CC.toInt())
-            setCompoundDrawables(TvGlyph(kind,filled=isSelected && kind==TvGlyph.Kind.HOME).apply { setBounds(0,0,dp(17),dp(17)) },null,null,null)
-            val base=TvStyle.shape(context,if(isSelected) TvStyle.surface else Color.TRANSPARENT,if(hasFocus()) TvStyle.text else Color.TRANSPARENT,radius=6)
+            setTextColor(if(isSelected) TvStyle.text else TvStyle.muted)
+            setCompoundDrawables(TvGlyph(kind,filled=isSelected && kind==TvGlyph.Kind.HOME).apply { setBounds(0,0,dp(22),dp(22)) },null,null,null)
+            val base=TvControlDrawable(context,quiet=true)
             background=if(isSelected) LayerDrawable(arrayOf(base,TvStyle.shape(context,TvStyle.accent,radius=2))).apply {
-                setLayerGravity(1,Gravity.START or Gravity.CENTER_VERTICAL);setLayerSize(1,dp(3),dp(27))
+                setLayerGravity(1,Gravity.START or Gravity.CENTER_VERTICAL);setLayerSize(1,dp(3),dp(30))
             } else base
         }
         redraw={ paint() };paint();setOnFocusChangeListener { _,_-> paint() }

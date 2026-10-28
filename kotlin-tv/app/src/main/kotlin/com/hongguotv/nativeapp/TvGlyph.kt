@@ -8,7 +8,7 @@ import kotlin.math.sin
 
 /** Small vector-like glyphs, drawn at the requested density without bitmap assets. */
 class TvGlyph(private var kind: Kind,private var color: Int=TvStyle.text,private val filled: Boolean=false): Drawable() {
-    enum class Kind { HOME, RANK, BOOKMARK, LAYERS, AI, SEARCH, PLUS, CHECK, ARROW, SETTINGS, PHONE, HISTORY, PLAY, PAUSE, PREVIOUS, SKIP, REWIND, FORWARD, NEXT, BACK, UP, DOWN, CLOSE, QUALITY, SPEED, FRAME, FILM, TRANSFER, EYE, INFO, CODE }
+    enum class Kind { STAR, HOME, RANK, BOOKMARK, LAYERS, AI, SEARCH, PLUS, CHECK, ARROW, SETTINGS, PHONE, HISTORY, PLAY, PAUSE, PREVIOUS, SKIP, REWIND, FORWARD, NEXT, BACK, UP, DOWN, CLOSE, QUALITY, SPEED, FRAME, FILM, TRANSFER, EYE, INFO, CODE }
     private val paint=Paint(Paint.ANTI_ALIAS_FLAG).apply { style=Paint.Style.STROKE; strokeWidth=1.7f; strokeCap=Paint.Cap.ROUND; strokeJoin=Paint.Join.ROUND }
     override fun draw(canvas: Canvas) {
         val scale=minOf(bounds.width(),bounds.height())/24f
@@ -19,6 +19,7 @@ class TvGlyph(private var kind: Kind,private var color: Int=TvStyle.text,private
         fun line(x: Float,y: Float,a: Float,b: Float)=canvas.drawLine(x,y,a,b,paint)
         fun circle(x: Float,y: Float,r: Float)=canvas.drawCircle(x,y,r,paint)
         when(kind) {
+            Kind.STAR -> { val p=Path();repeat(10) { i -> val a=(i*36-90)*Math.PI/180;val r=if(i%2==0) 10f else 4.5f;val x=12+cos(a).toFloat()*r;val y=12+sin(a).toFloat()*r;if(i==0) p.moveTo(x,y) else p.lineTo(x,y) };p.close();canvas.drawPath(p,paint) }
             Kind.HOME -> { val p=Path().apply { moveTo(3f,10f);lineTo(12f,2f);lineTo(21f,10f);lineTo(21f,21f);lineTo(15f,21f);lineTo(15f,14f);lineTo(9f,14f);lineTo(9f,21f);lineTo(3f,21f);close() };canvas.drawPath(p,paint) }
             Kind.RANK -> { val p=Path().apply { moveTo(13f,3f);cubicTo(14f,8f,20f,10f,20f,15f);cubicTo(20f,20f,16f,22f,12f,22f);cubicTo(7f,22f,4f,19f,4f,15f);cubicTo(4f,12f,5f,9f,8f,7f);cubicTo(7f,11f,9f,14f,12f,14f);cubicTo(15f,14f,16f,10f,13f,3f);close() };canvas.drawPath(p,paint) }
             Kind.BOOKMARK -> { val p=Path().apply { moveTo(5f,3f);lineTo(19f,3f);lineTo(19f,22f);lineTo(12f,17f);lineTo(5f,22f);close() };canvas.drawPath(p,paint) }
