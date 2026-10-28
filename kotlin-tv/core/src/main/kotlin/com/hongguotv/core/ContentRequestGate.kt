@@ -18,7 +18,7 @@ class ContentRequestGate(private val clock: () -> Long = System::currentTimeMill
     @Synchronized fun success(host: String) { failures.remove(host) }
     @Synchronized fun failed(host: String) {
         val count=((failures[host] ?: 0)+1).coerceAtMost(3); failures[host]=count
-        block(host,listOf(5L,15L,60L)[count-1]*60_000L)
+        block(host,listOf(5L,15L,60L)[count-1]*1_000L)
     }
     private fun block(host: String,delay: Long) {
         val now=clock()

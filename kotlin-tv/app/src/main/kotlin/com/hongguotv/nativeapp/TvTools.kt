@@ -41,6 +41,7 @@ class TvTools(private val activity: Activity) {
     fun close() { dialog?.dismiss(); phone?.close(); phone=null }
     fun destroy() { close(); worker.shutdownNow() }
     fun info(title: String,message: String,anchor: View?) = open(AlertDialog.Builder(activity).setTitle(title).setMessage(message).setPositiveButton("知道了",null).create(),anchor)
+    fun diagnostics(anchor: View?,extra: String="") = open(DiagnosticDialog.create(activity,extra),anchor)
     fun confirm(title: String,message: String,anchor: View?,action: ()->Unit) {
         val next=AlertDialog.Builder(activity).setTitle(title).setMessage(message).setNegativeButton("取消",null).setPositiveButton("确认") { _,_-> action() }.create()
         open(next,anchor); next.getButton(AlertDialog.BUTTON_NEGATIVE).requestFocus()

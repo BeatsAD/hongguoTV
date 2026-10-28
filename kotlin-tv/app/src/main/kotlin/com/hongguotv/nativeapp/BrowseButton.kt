@@ -56,9 +56,16 @@ internal class BrowseStatus(context: Context,action: ()->Unit): LinearLayout(con
     private val ui=BrowseUi(context)
     private val label=ui.text("",11f,TvStyle.muted).apply { maxLines=2 }
     private val button=BrowseButton(context,"继续加载",BrowseButton.Role.TEXT,action=action)
+    private val diagnostics=BrowseButton(context,"诊断详情",BrowseButton.Role.TEXT) {
+        DiagnosticDialog.create(context).also { dialog ->
+            dialog.setOnDismissListener { button.requestFocus() }
+            dialog.show();TvDialogStyle.apply(dialog)
+        }
+    }
     val actionView: View get()=button
-    init { gravity=Gravity.CENTER_VERTICAL;minimumHeight=ui.dp(33);setPadding(0,ui.dp(4),0,0);addView(label,LayoutParams(0,-2,1f));addView(button) }
+    init { gravity=Gravity.CENTER_VERTICAL;minimumHeight=ui.dp(33);setPadding(0,ui.dp(4),0,0);addView(label,LayoutParams(0,-2,1f));addView(diagnostics);addView(button) }
     fun show(message: String,operation: String?=null) {
         label.text=message;button.text=operation;button.visibility=if(operation==null) GONE else VISIBLE
+        diagnostics.visibility=if(operation=="重试") VISIBLE else GONE
     }
 }

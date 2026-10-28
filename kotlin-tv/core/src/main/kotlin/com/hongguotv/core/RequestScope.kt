@@ -39,6 +39,7 @@ class RequestScope {
 
     companion object {
         private val current = ThreadLocal<RequestScope>()
+        fun isCancelled(): Boolean = current.get()?.let { scope -> synchronized(scope) { scope.cancelled } } ?: false
         fun <T> execute(call: Call, consume: (Response) -> T): T {
             val owner = current.get()
             owner?.attach(call)

@@ -94,7 +94,7 @@ class NativeBrowseController(private val activity: Activity,private val reposito
         val future=workers.submit {
             val result=runCatching {
                 val connectivity=activity.getSystemService(ConnectivityManager::class.java)
-                if(connectivity.getNetworkCapabilities(connectivity.activeNetwork)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)!=true) throw java.io.IOException("网络未连接，请连接后重试")
+                if(connectivity.getNetworkCapabilities(connectivity.activeNetwork)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)!=true) throw ContentProtocolException("网络未连接，请连接后重试")
                 scope.run(action)
             }
             main.post {
@@ -104,7 +104,10 @@ class NativeBrowseController(private val activity: Activity,private val reposito
         }
         jobs[key]=scope to future
     }
-    private fun error(e: Throwable)=when(e) { is ContentRequestDeferredException->"服务冷却中，请稍后重试";is java.net.UnknownHostException->"无法连接内容服务，请检查网络";is java.net.ConnectException->"无法连接内容服务";is java.net.SocketTimeoutException->"连接超时";else->e.message.orEmpty().replace(Regex("https?://\\S+"),"[地址]").take(95).ifBlank { "加载失败" } }
+    private fun error(e: Throwable): String {
+        val entry=Diagnostics.failure("浏览 $route",e)
+        return Diagnostics.summary(e)+" · 诊断 "+entry.substringBefore(' ')
+    }
     private fun renderShell(keepNavigationFocus: Boolean=false) {
         val target=root ?: return
         home=null;catalogView=null;rankView=null;searchView=null;localGrid=null
@@ -190,7 +193,13 @@ class NativeBrowseController(private val activity: Activity,private val reposito
         if(state.busy || (state.cursor!=null && state.items.size>=54) || (state.cursor!=null && (!state.hasMore || state.error.isNotBlank()))) return
         val cursor=state.cursor;state.busy=true;updateHome()
         request("home:${genre.storedValue}",{ categories.load(state.query,cursor,if(cursor==null) emptyList() else state.items.map { it.id }) },{ result ->
-            state.busy=false;val prior=if(cursor==null) emptyList() else state.items;val merged=ListProgress.merge(prior,result.items) { it.id }
+            state.busy=false
+            if(cursor==null && result.items.isEmpty() && state.items.isNotEmpty()) {
+                state.error="内容服务本批返回空列表，保留上次内容"
+                Diagnostics.record("首页兜底","type=${genre.name} 保留同分类缓存 count=${state.items.size}")
+                homeRefresh.complete(genre.label,true);updateHome();return@request
+            }
+            val prior=if(cursor==null) emptyList() else state.items;val merged=ListProgress.merge(prior,result.items) { it.id }
             state.items=merged.take(54);state.hasMore=result.hasMore
             state.error=if(ListProgress.stalled(cursor?.offset ?: -1,result.cursor.offset,merged.size-prior.size,result.hasMore)) "分页未前进" else ""
             state.cursor=result.cursor;library.cacheHome(genre,result.items,result.hasMore)
@@ -267,7 +276,7 @@ class NativeBrowseController(private val activity: Activity,private val reposito
             results.forEach { (genre,result) -> result.onSuccess { page ->
                 val previous=search.items.size;search.items=ListProgress.merge(search.items,page.items.map { it.copy(contentType=genre) }) { it.id }.take(ListProgress.MAX_ITEMS)
                 search.pages[genre]=pages.getValue(genre);search.more[genre]=page.hasMore
-                if(page.hasMore && previous==search.items.size) { search.more[genre]=false;errors+="${genre.label}本批没有新增结果" }
+                if(page.hasMore && previous==search.items.size) { errors+="${genre.label}本批没有匹配结果，可手动继续检查后续内容" }
             }.onFailure { errors+="${genre.label}：${error(it)}" } }
             search.error=errors.joinToString("；");searchView?.update()
         },{ e -> search.busy=false;search.error=error(e);searchView?.update() })

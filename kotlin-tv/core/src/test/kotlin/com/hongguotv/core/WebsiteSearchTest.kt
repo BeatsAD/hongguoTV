@@ -16,13 +16,35 @@ class WebsiteSearchTest {
         OkHttpClient.Builder().addInterceptor { chain ->
             Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("OK")
                 .body(respond(chain.request()).toResponseBody()).build()
-        }.build(),clock,gate
+        }.build(),clock,gate,PlaybackDeviceSession(register={ _,_->DeviceRegister.Registered("123","456") })
     )
     private fun card(id: String, genre: String, docType: Int = 23) = JSONObject().put("doc_type",docType)
         .put("video_data",JSONObject().put("series_id",id).put("series_title","测试剧集$id").put("genre",genre).put("episode_cnt",12))
     private fun page(number: Int = 1, more: Boolean = false, vararg rows: JSONObject) = JSONObject()
         .put("searchList",JSONArray(rows.toList())).put("pageNum",number).put("totalPages",if(more) number+1 else number).put("hasMore",more).toString()
 
+    @Test fun validButEmptyAppFirstPageVerifiesWebsiteAndKeepsItsCursor() {
+        var appCalls=0
+        val repo=repository { request ->
+            if(request.url.host!="hongguoduanju.com") {
+                appCalls++
+                """{"code":0,"search_tabs":[{"tab_type":19,"data":[],"has_more":false}]}"""
+            } else {
+                val number=request.url.queryParameter("page")?.toInt() ?: 1
+                page(number,number==1,card("$number","205"))
+            }
+        }
+        assertEquals("1",repo.search("测试",type=ContentType.COMIC).items.single().id)
+        assertEquals("2",repo.search("测试",2,ContentType.COMIC).items.single().id)
+        assertEquals(1,appCalls)
+    }
+    @Test fun emptyPrimaryAndFailedWebsiteMustNotClaimNoResults() {
+        val repo=repository { request ->
+            if(request.url.host!="hongguoduanju.com") """{"code":0,"search_tabs":[{"tab_type":19,"data":[],"has_more":false}]}"""
+            else throw java.net.SocketTimeoutException("timeout")
+        }
+        assertThrows(IOException::class.java) { repo.search("测试",type=ContentType.COMIC) }
+    }
     @Test fun emptyAppResponseUsesWebsiteWithExplicitGenreForEachType() {
         for(type in ContentType.entries.filter { it.searchTab!=null }) {
             val paths=mutableListOf<String>()

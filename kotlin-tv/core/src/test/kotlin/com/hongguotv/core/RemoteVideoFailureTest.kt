@@ -8,6 +8,20 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class RemoteVideoFailureTest {
+    @Test fun accessDenialAndRateLimitDoNotSwitchCdn() {
+        for(status in listOf(403,429)) {
+            var calls=0
+            val http=OkHttpClient.Builder().addInterceptor { chain ->
+                calls++
+                Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(status).message("test")
+                    .body(byteArrayOf().toResponseBody()).build()
+            }.build()
+            RemoteVideo(http,StreamInfo("https://example.com/main",null,"720P",backupUrls=listOf("https://other.example/backup"))).use { remote ->
+                assertThrows(PlaybackSourceException::class.java) { remote.prepare() }
+                assertEquals(1,calls)
+            }
+        }
+    }
     private fun video(status: Int)=RemoteVideo(OkHttpClient.Builder().addInterceptor { chain ->
         Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(status).message("test")
             .header("Content-Range","bytes 0-31/32").body(ByteArray(32).toResponseBody()).build()

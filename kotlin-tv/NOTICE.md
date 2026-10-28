@@ -26,3 +26,8 @@
 播放请求身份、请求头及内联视频列表解析参考 tsukiyo-zero/hongguoTV（GPL-3.0），提交
 `88c6238d4ee987f45eb134215e221df0b8634f55`：
 https://github.com/tsukiyo-zero/hongguoTV/blob/88c6238d4ee987f45eb134215e221df0b8634f55/kotlin-tv/core/src/main/kotlin/com/hongguotv/core/ContentRepository.kt
+
+匿名设备注册协议参考 tsukiyo-zero/hongguoTV 的 `DeviceRegister.kt`（GPL-3.0-only），
+原实现声明派生于 charlie901208/HGTV 的 feat/phone-login 分支。本版保留协议字段，
+使用 SecureRandom、受限响应读取、独立匿名 Cookie、持久身份和失败冷却；不引入账号登录。
+https://github.com/tsukiyo-zero/hongguoTV/blob/main/kotlin-tv/core/src/main/kotlin/com/hongguotv/core/DeviceRegister.kt

@@ -48,6 +48,7 @@ internal object ListCards {
     fun data(raw: String): JSONObject {
         if(raw.isBlank()) throw ListProtocolException("内容服务返回空响应")
         val root=try { JSONObject(raw) } catch(e: Exception) { throw ListProtocolException("内容响应结构异常") }
+        Diagnostics.record("内容解析","businessCode=${root.optInt("code",-1)} hasData=${root.optJSONObject("data")!=null}")
         if(!root.has("code") || root.optInt("code",-1)!=0) throw ListProtocolException("内容服务拒绝了本次请求")
         return root.optJSONObject("data") ?: throw ListProtocolException("内容响应缺少数据")
     }

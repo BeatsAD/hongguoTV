@@ -40,6 +40,7 @@ class CategoryRepository(repository: ContentRepository) {
             val offset=data.optInt("next_offset",-1); val session=data.str("session_id"); val more=data.optBoolean("has_more")
             if(offset<0 || (more && session.isBlank())) throw ListProtocolException("分类游标无效")
             val items=rows.objects().map { ListCards.series(it,query.type) }.filter(ListCards::valid).distinctBy { it.id }
+            if(rows.length()==0 && more) throw ListProtocolException("分类返回空列表但仍标记有后续内容，请稍后重试")
             if(rows.length()>0 && items.isEmpty()) throw ListProtocolException("分类条目格式已变化")
             return CategoryPage(items,ListCards.dimensions(data.optJSONArray("selector_rows")).filter { it.id!="genre" },CatalogCursor(offset,session,query.fingerprint),more)
         }

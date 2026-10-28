@@ -9,6 +9,7 @@ import android.widget.TextView
 
 /** Shared modal geometry; leave each owner's dismissal and focus-return callbacks intact. */
 object TvDialogStyle {
+    fun diagnosticBodyHeight(context: android.content.Context)=(context.resources.displayMetrics.heightPixels*.55f).toInt()
     fun apply(dialog: AlertDialog) {
         val context=dialog.context; val metrics=context.resources.displayMetrics
         dialog.window?.apply {
@@ -20,7 +21,13 @@ object TvDialogStyle {
             divider=ColorDrawable(TvStyle.outline); dividerHeight=(metrics.density*.5f).toInt().coerceAtLeast(1)
         }
         listOf(AlertDialog.BUTTON_POSITIVE,AlertDialog.BUTTON_NEGATIVE,AlertDialog.BUTTON_NEUTRAL).forEach { which ->
-            dialog.getButton(which)?.apply { textSize=13f; setTextColor(TvStyle.text); minHeight=(42*metrics.density).toInt() }
+            dialog.getButton(which)?.apply {
+                textSize=13f
+                setTextColor(android.content.res.ColorStateList(
+                    arrayOf(intArrayOf(android.R.attr.state_focused),intArrayOf(android.R.attr.state_pressed),intArrayOf()),
+                    intArrayOf(TvStyle.background,TvStyle.background,TvStyle.text)))
+                minHeight=(42*metrics.density).toInt()
+            }
         }
         dialog.findViewById<TextView>(android.R.id.message)?.apply { textSize=13f; setTextColor(Color.rgb(174,176,187)) }
     }

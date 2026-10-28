@@ -45,7 +45,7 @@ class ListProtocolTest {
     @Test fun `valid empty is different from blank body refusal or missing list`() {
         val query=CategoryQuery(ContentType.AI)
         assertTrue(CategoryRepository.parse("""{"code":0,"data":{"video_data":[],"has_more":false,"next_offset":0}}""",query).items.isEmpty())
-        for(value in listOf("","{}","{","""{"code":1,"data":{}}""","""{"code":0,"data":{"has_more":false,"next_offset":0}}""")) {
+        for(value in listOf("","{}","{", """{"code":0,"data":{"video_data":[],"has_more":true,"next_offset":18,"session_id":"s"}}""","""{"code":1,"data":{}}""","""{"code":0,"data":{"has_more":false,"next_offset":0}}""")) {
             assertThrows(ListProtocolException::class.java) { CategoryRepository.parse(value,query) }
         }
     }

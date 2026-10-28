@@ -28,7 +28,7 @@ class ContentRequestGateTest {
             calls++
             Response.Builder().request(it.request()).protocol(Protocol.HTTP_1_1).code(403).message("Forbidden")
                 .body("".toResponseBody()).build()
-        }.build())
+        }.build(),playbackSession=PlaybackDeviceSession(register={ _,_->DeviceRegister.Registered("123","456") }))
         assertThrows(ContentRequestDeferredException::class.java) { repo.search("测试") }
         assertEquals(1,calls)
     }
@@ -51,10 +51,10 @@ class ContentRequestGateTest {
     @Test fun repeatedFailuresBackOffAndSuccessResetsFailureCount() {
         var now=0L; val gate=ContentRequestGate {now}
         gate.failed("example.com")
-        assertEquals(300_000L,assertThrows(ContentRequestDeferredException::class.java) { gate.check("example.com") }.retryAfterMillis)
-        now=300_001; gate.failed("example.com")
-        assertEquals(900_000L,assertThrows(ContentRequestDeferredException::class.java) { gate.check("example.com") }.retryAfterMillis)
-        now+=900_001; gate.success("example.com"); gate.failed("example.com")
-        assertEquals(300_000L,assertThrows(ContentRequestDeferredException::class.java) { gate.check("example.com") }.retryAfterMillis)
+        assertEquals(5_000L,assertThrows(ContentRequestDeferredException::class.java) { gate.check("example.com") }.retryAfterMillis)
+        now=5_001; gate.failed("example.com")
+        assertEquals(15_000L,assertThrows(ContentRequestDeferredException::class.java) { gate.check("example.com") }.retryAfterMillis)
+        now+=15_001; gate.success("example.com"); gate.failed("example.com")
+        assertEquals(5_000L,assertThrows(ContentRequestDeferredException::class.java) { gate.check("example.com") }.retryAfterMillis)
     }
 }

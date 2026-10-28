@@ -43,6 +43,13 @@ class ContentRepositoryTest {
         assertEquals(StreamInfo("https://example.com/low",null,"480P",codec="h264"),repo.stream("123",720))
         assertEquals(1,calls)
     }
+    @Test fun inlineBackupIsKeptWithTheSameRendition() {
+        val body=JSONObject(inlineModel(Triple(720,"h264","https://example.com/main")))
+        body.getJSONObject("data").getJSONObject("123").getJSONObject("video_model").getJSONArray("video_list").getJSONObject(0)
+            .put("backup_url","https://other.example/backup")
+        val stream=repository { body.toString() }.stream("123")
+        assertEquals("720P",stream.quality);assertEquals(listOf("https://other.example/backup"),stream.backupUrls)
+    }
 
     @Test fun inlineModelSupportsStringModelAndHigherCompatibleQuality() {
         val body=JSONObject(inlineModel(Triple(1080,"h264","https://example.com/high")))
@@ -66,6 +73,18 @@ class ContentRepositoryTest {
         assertEquals("播放接口暂不可用（错误码 110001）",assertThrows(IOException::class.java) { repository { """{"code":110001}""" }.stream("123") }.message)
     }
 
+    @Test fun transientEmptyPlaybackIsRetriedOnlyOnceAndCanRecover() {
+        var calls=0
+        val repo=repository { calls++; if(calls==1) "" else inlineModel(Triple(720,"h264","https://example.com/good")) }
+        assertEquals("720P",repo.stream("123").quality)
+        assertEquals(2,calls)
+        calls=0
+        assertThrows(EmptyContentException::class.java) { repository { calls++; "" }.stream("123") }
+        assertEquals(2,calls)
+        calls=0
+        assertThrows(PlaybackSourceException::class.java) { repository { calls++; """{"code":110001}""" }.stream("123") }
+        assertEquals(1,calls)
+    }
     @Test fun encryptedInlineResourceWithoutKeyIsNotTreatedAsClearVideo() {
         val body=inlineModel(Triple(720,"h264","https://example.com/encrypted")).replace("\"encrypt\":false","\"encrypt\":true")
         assertThrows(IOException::class.java) { repository { body }.stream("123") }
@@ -139,7 +158,9 @@ class ContentRepositoryTest {
         OkHttpClient.Builder().addInterceptor { chain ->
             Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
                 .code(200).message("OK").body(respond(chain.request()).toResponseBody()).build()
-        }.build(),clock
+        }.build(),clock,playbackSession=PlaybackDeviceSession(register={ _,_->
+            DeviceRegister.Registered("3"+(1..18).joinToString("") { kotlin.random.Random.nextInt(10).toString() },"3"+(1..18).joinToString("") { kotlin.random.Random.nextInt(10).toString() })
+        })
     )
 
     private fun rankPayload(page: Int = 1, totalPages: Int = 2) = JSONObject()
@@ -315,9 +336,12 @@ class ContentRepositoryTest {
 
     @Test fun emptyComicSearchDoesNotFallBackToShortResults() {
         var requests=0
-        val repo=repository { requests++; """{"code":0,"search_tabs":[{"tab_type":19,"data":[],"has_more":false}]}""" }
+        val repo=repository { request -> requests++
+            if(request.url.host=="hongguoduanju.com") """{"searchList":[{"doc_type":23,"video_data":{"series_id":"456","series_title":"真人剧","genre":"203"}}],"pageNum":1,"totalPages":1,"hasMore":false}"""
+            else """{"code":0,"search_tabs":[{"tab_type":19,"data":[],"has_more":false}]}"""
+        }
         assertTrue(repo.search("无结果",1,ContentType.COMIC).items.isEmpty())
-        assertEquals(1,requests)
+        assertEquals(2,requests)
     }
 
     @Test fun missingComicTabDoesNotAcceptUnclassifiedWebsiteData() {

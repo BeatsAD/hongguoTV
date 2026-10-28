@@ -137,6 +137,8 @@ object MediaCrypto {
         if(start<prepared.header.size) prepared.header.copyInto(result,0,start.toInt(),minOf(end,prepared.header.size.toLong()).toInt())
         if(key==null) return result
         val samples=prepared.samples
+        val cipher=javax.crypto.Cipher.getInstance("AES/CTR/NoPadding")
+        val secret=javax.crypto.spec.SecretKeySpec(key,"AES")
         var low=0; var high=samples.size
         while(low<high) { val middle=(low+high) ushr 1; if(samples[middle].end<=start) low=middle+1 else high=middle }
         for(i in low until samples.size) {
@@ -145,7 +147,8 @@ object MediaCrypto {
             val relative=begin-sample.start+sample.encryptedOffset; val skip=(relative%16).toInt()
             val counter=(BigInteger(1,sample.iv)+BigInteger.valueOf(relative/16)).and(BigInteger.ONE.shiftLeft(128)-BigInteger.ONE).toByteArray()
             val iv=ByteArray(16); counter.copyInto(iv,maxOf(0,16-counter.size),maxOf(0,counter.size-16),counter.size)
-            val decrypted=aes("CTR",key,iv,ByteArray(skip)+result.copyOfRange((begin-start).toInt(),(stop-start).toInt()))
+            cipher.init(javax.crypto.Cipher.DECRYPT_MODE,secret,javax.crypto.spec.IvParameterSpec(iv))
+            val decrypted=cipher.doFinal(ByteArray(skip)+result.copyOfRange((begin-start).toInt(),(stop-start).toInt()))
             decrypted.copyInto(result,(begin-start).toInt(),skip)
         }
         return result
