@@ -7,9 +7,14 @@ import okhttp3.Request
 import okhttp3.Response
 import java.io.Closeable
 import java.io.IOException
+import java.util.concurrent.Executor
+import java.util.concurrent.RejectedExecutionException
 
 /** One playback stream. No listening socket or local HTTP service. */
-class RemoteVideo(http: OkHttpClient, val info: StreamInfo): Closeable {
+class RemoteVideo(
+    http: OkHttpClient,val info: StreamInfo,
+    private val closeExecutor: Executor=Executor { it.run() }
+): Closeable {
     // Shares the caller's pool/dispatcher; no new executor. Do not wait 30–45 seconds on a dead CDN.
     private val http=http.newBuilder()
         .connectTimeout(minOf(http.connectTimeoutMillis.takeIf { it>0 } ?: 8000,8000).toLong(),java.util.concurrent.TimeUnit.MILLISECONDS)
@@ -103,7 +108,7 @@ class RemoteVideo(http: OkHttpClient, val info: StreamInfo): Closeable {
         if(prefix.size<size) prefix=prefix+range(prefix.size.toLong(),size-1L).bytes
         return this
     }
-    /** Close only the current read window on a Media3 seek/reopen; keep parsed index/prefix. */
+    /** Close the read window on the media/loading thread; TLS close may write to the network. */
     @Synchronized fun closeRead() {
         windowCall?.let { call ->
             call.cancel()
@@ -175,8 +180,21 @@ class RemoteVideo(http: OkHttpClient, val info: StreamInfo): Closeable {
         return out.toByteArray()
     }
     override fun close() {
-        // Cancel first: a blocked read owns this monitor, so taking it first would hang exit.
-        synchronized(calls) { closed=true; calls.toList().forEach { it.cancel() }; calls.clear() }
-        synchronized(this) { closeRead() }
+        val pending=synchronized(calls) {
+            if(closed) return
+            closed=true
+            calls.toList().also { calls.clear() }
+        }
+        // Playback owners provide a background executor: even cancelling/closing TLS may write.
+        // Reject new reads immediately, but never make the UI wait for the read monitor.
+        val cleanup=Runnable {
+            pending.forEach { it.cancel() }
+            synchronized(this) { closeRead() }
+        }
+        try { closeExecutor.execute(cleanup) }
+        catch(_: RejectedExecutionException) {
+            // A cancelled prepare may finish after its Activity has shut down the executor.
+            Thread(cleanup,"hongguotv-video-cleanup").start()
+        }
     }
 }

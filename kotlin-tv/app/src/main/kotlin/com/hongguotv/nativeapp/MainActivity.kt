@@ -621,7 +621,7 @@ class MainActivity: Activity() {
         controls.removeAllViews(); controls.visibility=View.GONE; transportPlay=null; sleepButton=null
         syncMediaSession()
         val ticket=generation
-        work({ prefetched ?: RemoteVideo(repository.http,repository.stream(requestedId,maxQuality) { it.variantKey !in rejected && playbackAttempt.withinNetworkLimit(it) && decoderSupport.supports(it) }).prepare() }, { remote ->
+        work({ prefetched ?: RemoteVideo(repository.http,repository.stream(requestedId,maxQuality) { it.variantKey !in rejected && playbackAttempt.withinNetworkLimit(it) && decoderSupport.supports(it) },closeExecutor=networkCleanup).prepare() }, { remote ->
             video=remote; quality=remote.info.quality
             Diagnostics.record("播放准备","quality=$quality codec=${remote.info.codec} elapsedMs=${android.os.SystemClock.elapsedRealtime()-playbackStarted}")
             val p=player ?: run {
@@ -709,7 +709,7 @@ class MainActivity: Activity() {
             var remote: RemoteVideo?=null
             try {
                 val prepared=scope.run {
-                    RemoteVideo(http,source.stream(id,quality,decoderSupport::supports)).also { remote=it; it.warm() }
+                    RemoteVideo(http,source.stream(id,quality,decoderSupport::supports),closeExecutor=networkCleanup).also { remote=it; it.warm() }
                 }
                 if(preparedNext.complete(ticket,key,prepared)) android.util.Log.i("HongguoTV","Next episode prepared near end")
             } catch(_: Exception) { remote?.close() }

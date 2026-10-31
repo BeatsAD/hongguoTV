@@ -95,7 +95,8 @@ class RemoteVideoStreamingTest {
             } catch(_: java.io.IOException) { exchange.close() }
         }
         server.start();val client=OkHttpClient();val workers=Executors.newFixedThreadPool(2)
-        val remote=RemoteVideo(client,StreamInfo("http://127.0.0.1:${server.address.port}/video",null,"720P"))
+        val cleanup=Executors.newSingleThreadExecutor()
+        val remote=RemoteVideo(client,StreamInfo("http://127.0.0.1:${server.address.port}/video",null,"720P"),closeExecutor=cleanup)
         try {
             remote.prepare()
             val reading=workers.submit<Boolean> { try { remote.readChunk(32768,65536);false } catch(_: java.io.IOException) { true } }
@@ -104,6 +105,7 @@ class RemoteVideoStreamingTest {
             assertTrue(reading.get(2,TimeUnit.SECONDS))
         } finally {
             release.countDown();remote.close();workers.shutdownNow();server.stop(0)
+            cleanup.shutdown();cleanup.awaitTermination(2,TimeUnit.SECONDS)
             client.connectionPool.evictAll();client.dispatcher.executorService.shutdownNow()
         }
     }
