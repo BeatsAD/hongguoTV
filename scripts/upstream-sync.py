@@ -231,7 +231,7 @@ def propose_local(config, branch):
     if existing:
         pr = existing[0]
     else:
-        pr = api(f'repos/{config["repository"]}/pulls', "POST", {"title": f"审核本地改动：{branch}", "head": branch, "base": "main", "body": f"由仓库所有者指定开发分支，机器人创建 PR 以便单人仓库的 @{config['reviewer']} 审核。\n\n请检查代码、兼容性与原有功能；通过两项必需检查并审核后，可手动合并。应用源码变更合并后自动签名发布；配置或说明变更不产生 APK。"})
+        pr = api(f'repos/{config["repository"]}/pulls', "POST", {"title": f"审核本地改动：{branch}", "head": branch, "base": "main", "body": f"## 问题与结果\n\n由仓库所有者指定开发分支，机器人创建 PR 以便单人仓库的 @{config['reviewer']} 审核。\n\n## 主要修改\n\n请根据本分支的实际代码差异补充功能、兼容性及数据保留影响。\n\n## 验证\n\n等待 TV verification 与 Upstream preservation 通过，之后由所有者审核并手动合并。应用代码变更合并后自动签名发布；配置或说明变更不产生 APK。设备验收范围需按实际填写。\n\n## 提交前确认\n\n- [ ] 已核对功能、界面和兼容性。\n- [ ] 无密钥或私人数据，来源与许可证完整。\n- [ ] 已说明升级和数据保留影响。"})
     ensure_verification(config, branch, head)
     print(pr["html_url"])
 
@@ -285,7 +285,11 @@ def detect(repo, config, upstream_target=None):
     repo.git("push", f'https://github.com/{config["repository"]}.git', f'HEAD:refs/heads/{branch}')
     clean = "\n".join(f"- `{path}`" for path in patches) or "- 暂无可直接合并的源码，需要人工移植。"
     unresolved = "\n".join(f'- `{path}`：{value["reason"]}；原文件保留，未推进该文件的同步基线。' for path, value in updated["unresolved"].items()) or "- 无。"
-    body = f'''自动检测到上游核心改动，目标提交：[N3urda/hongguoTV@{target[:12]}](https://github.com/{config["upstream"]}/commit/{target})。
+    body = f'''## 问题与结果
+
+自动检测到上游核心改动，目标提交：[N3urda/hongguoTV@{target[:12]}](https://github.com/{config["upstream"]}/commit/{target})。
+
+## 主要修改
 
 可兼容合并的源码：
 {clean}
@@ -297,9 +301,21 @@ def detect(repo, config, upstream_target=None):
 
 本次另有 {len(excluded)} 个上游原生路径未自动引入，包括界面、新功能、依赖和测试。完整清单见本次检测工作流附件，需要移植时另行审核。
 
+## 验证
+
+自动化检查：等待本 PR 的 **TV verification** 与 **Upstream preservation** 完成。未操作模拟器或实体电视。
+
 必须先通过 **TV verification** 与 **Upstream preservation**，再由 @{config["reviewer"]} 审核当前提交。机器人不会代替人审批；审核前不合并、不发布。审核通过后控制工作流自动合并并触发签名发布。
 
 本 PR 只同步上面列出的兼容部分；待移植项没有被标记为已修复。自动测试不代表实体电视验收。
+
+## 提交前确认
+
+- [x] 修改范围集中，未引入上游界面、新功能或依赖更新。
+- [x] 未提交密钥、设备身份、私人备份、APK 或调试日志。
+- [x] 保留 GPL 来源与许可证声明。
+- [x] 包名、签名、数据格式与覆盖升级策略保持不变。
+- [x] 本 PR 为普通兼容性修复，不披露未修复的安全漏洞。
 '''
     (work / "proposal.md").write_text(body)
     (work / "report.json").write_text(json.dumps(audit | {"candidate": sha, "applied": list(patches), "unresolved": updated["unresolved"], "excluded": excluded}, indent=2))
