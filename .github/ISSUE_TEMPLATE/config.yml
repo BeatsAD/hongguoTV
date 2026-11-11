@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 私密安全漏洞报告
+    url: https://github.com/BeatsAD/hongguoTV/security/advisories/new
+    about: 漏洞、凭据泄露或隐私问题请私密报告，勿公开提交。
+  - name: 中文安装与使用指南
+    url: https://github.com/BeatsAD/hongguoTV/blob/main/docs/INSTALL.zh-CN.md
+    about: 安装、保留数据升级、遥控器操作、手机辅助与常见问题。
+  - name: 兼容性说明
+    url: https://github.com/BeatsAD/hongguoTV/blob/main/docs/COMPATIBILITY.zh-CN.md
+    about: 系统、架构、解码、签名以及已验证范围。
