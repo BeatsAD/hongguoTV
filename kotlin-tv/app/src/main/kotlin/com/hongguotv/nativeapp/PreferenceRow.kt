@@ -21,16 +21,16 @@ class PreferenceRow(context: Context,label: String,kind: TvGlyph.Kind): TextView
     private val badge=Paint(Paint.ANTI_ALIAS_FLAG).apply { color=TvStyle.selected }
     private fun dp(n: Int)=n*resources.displayMetrics.density
     init { text=label; textSize=16f; includeFontPadding=false; minHeight=dp(60).toInt() }
-    private fun layout(value: String,size: Float,width: Int,color: Int): StaticLayout {
+    private fun layout(value: String,size: Float,width: Int,color: Int,alignment: Layout.Alignment=Layout.Alignment.ALIGN_NORMAL): StaticLayout {
         val p=TextPaint(Paint.ANTI_ALIAS_FLAG).apply { textSize=size*resources.displayMetrics.scaledDensity;typeface=Typeface.create(if(size>=16f) "sans-serif-medium" else "sans-serif",Typeface.NORMAL);this.color=color }
-        return StaticLayout.Builder.obtain(value,0,value.length,p,width.coerceAtLeast(1)).setMaxLines(2).setEllipsize(TextUtils.TruncateAt.END).setIncludePad(false).setAlignment(Layout.Alignment.ALIGN_NORMAL).build()
+        return StaticLayout.Builder.obtain(value,0,value.length,p,width.coerceAtLeast(1)).setMaxLines(2).setEllipsize(TextUtils.TruncateAt.END).setIncludePad(false).setAlignment(alignment).build()
     }
     private fun value()=text.toString().removePrefix(title).trim().trimStart('·').trim()
     override fun onMeasure(w: Int,h: Int) {
         super.onMeasure(w,h)
         val valueWidth=(measuredWidth*.36f).toInt()
         val titleWidth=(measuredWidth-dp(92)-valueWidth).toInt()
-        val content=maxOf(layout(title,16f,titleWidth,TvStyle.text).height,layout(value(),14f,valueWidth,TvStyle.muted).height)
+        val content=maxOf(layout(title,16f,titleWidth,TvStyle.text).height,layout(value(),14f,valueWidth,TvStyle.muted,Layout.Alignment.ALIGN_OPPOSITE).height)
         setMeasuredDimension(measuredWidth,resolveSize(maxOf(dp(60).toInt(),content+dp(24).toInt()),h))
     }
     override fun onDraw(canvas: Canvas) {
@@ -40,7 +40,7 @@ class PreferenceRow(context: Context,label: String,kind: TvGlyph.Kind): TextView
         chevron.setBounds((width-dp(28)).toInt(),(center-dp(8)).toInt(),(width-dp(12)).toInt(),(center+dp(8)).toInt());chevron.draw(canvas)
         val valueWidth=(width*.36f).toInt()
         val titleLayout=layout(title,16f,(width-dp(92)-valueWidth).toInt(),TvStyle.text)
-        val valueLayout=layout(value(),14f,valueWidth,TvStyle.muted)
+        val valueLayout=layout(value(),14f,valueWidth,TvStyle.muted,Layout.Alignment.ALIGN_OPPOSITE)
         var save=canvas.save();canvas.translate(dp(56),center-titleLayout.height/2);titleLayout.draw(canvas);canvas.restoreToCount(save)
         save=canvas.save();canvas.translate(width-dp(36)-valueWidth,center-valueLayout.height/2);valueLayout.draw(canvas);canvas.restoreToCount(save)
     }
