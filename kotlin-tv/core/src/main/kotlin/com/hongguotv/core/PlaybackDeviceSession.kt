@@ -15,14 +15,36 @@ class PlaybackRegistrationException(cause: Throwable?=null): IOException("匿名
 
 /** One anonymous identity, shared by foreground/search/prefetch; never rotate it on errors. */
 class PlaybackDeviceSession(private val clock: ()->Long=System::currentTimeMillis,
-    private val register: (OkHttpClient,Map<String,String>)->DeviceRegister.Registered? = ::registerDevice) {
+    private val register: (OkHttpClient,Map<String,String>)->DeviceRegister.Registered? = ::registerDevice,
+    private val registerPlayer: (OkHttpClient)->PlayerDevice = { DeviceRegistrar().register(it) }) {
     internal data class Profile(val values: Map<String,String>,val cookie: String)
     private var cdid=UUID.randomUUID().toString()
     private var ready: Profile?=null
+    private var player: PlayerDevice?=null
+    private var playerRetryAt=0L
     private var retryAt=0L
     // Playback-only routing hint. Never replaces the stored anonymous identity or cookies.
     @Volatile internal var compatibilityPlayback=false
     var changed: ((String)->Unit)?=null
+
+    /** A separate app identity for the upstream shortplay compatibility endpoint. Never rotates on failure. */
+    @Synchronized internal fun playerProfile(http: OkHttpClient): PlayerDevice {
+        player?.let { return it }
+        if(clock()<playerRetryAt) throw ContentRequestDeferredException(playerRetryAt-clock())
+        try {
+            val result=registerPlayer(http)
+            if(!validId(result.deviceId) || !validId(result.installId)) throw PlaybackRegistrationException()
+            if(Thread.currentThread().isInterrupted || RequestScope.isCancelled()) throw java.io.InterruptedIOException("请求已取消")
+            player=result;playerRetryAt=0;changed?.invoke(snapshot())
+            Diagnostics.record("兼容播放设备","注册成功，后续复用")
+            return result
+        } catch(error: IOException) {
+            if(!Thread.currentThread().isInterrupted && !RequestScope.isCancelled()) {
+                playerRetryAt=clock()+60_000;changed?.invoke(snapshot())
+            }
+            throw error
+        }
+    }
 
     @Synchronized internal fun profile(http: OkHttpClient): Profile {
         ready?.let { return it }
@@ -48,11 +70,15 @@ class PlaybackDeviceSession(private val clock: ()->Long=System::currentTimeMilli
     }
     @Synchronized fun snapshot(): String = JSONObject().put("cdid",cdid).put("retryAt",retryAt).apply {
         ready?.let { put("iid",it.values["iid"]);put("device_id",it.values["device_id"]);put("cookie",it.cookie) }
+        player?.let { put("player",JSONObject(it.toJson())) }
+        put("playerRetryAt",playerRetryAt)
     }.toString()
     @Synchronized fun restore(value: String?) {
         if(ready!=null || value==null) return
         runCatching {
             val o=JSONObject(value)
+            playerRetryAt=maxOf(playerRetryAt,o.optLong("playerRetryAt",0))
+            o.optJSONObject("player")?.let { PlayerDevice.fromJson(it.toString()) }?.let { player=it }
             retryAt=maxOf(retryAt,o.optLong("retryAt",0))
             val restored=o.str("cdid")
             if(runCatching { UUID.fromString(restored) }.isSuccess) cdid=restored

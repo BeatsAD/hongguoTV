@@ -53,16 +53,16 @@ class ContentRepositoryTest {
         }
     }
 
-    @Test fun emptyRegisteredRequestUsesOneCompatibilityRequestWithoutReplacingIdentity() {
+    @Test fun emptyGetUsesRegisteredSingleEpisodeWithoutReplacingCatalogIdentity() {
         var registrations=0
         val session=PlaybackDeviceSession(register={ _,_->
             registrations++;DeviceRegister.Registered("12345","67890",cookies=mapOf("ttreq" to "fixture-cookie"))
-        })
-        session.profile(OkHttpClient());val before=session.snapshot()
+        },registerPlayer={ PlayerDevice("23456","78901","player-cdid","","") })
+        val before=session.profile(OkHttpClient())
         val requests=mutableListOf<Request>()
         val reply: (Request)->String={ request ->
             requests+=request
-            if(request.url.queryParameter("device_id")=="12345") "" else inlineModel(Triple(720,"h264","https://example.com/video"))
+            if(request.method=="GET") "" else inlineModel(Triple(720,"h264","https://example.com/video"))
         }
         val repo=repository(session=session,respond=reply)
         repo.stream("123");repo.stream("123");repository(session=session,respond=reply).stream("123")
@@ -70,23 +70,26 @@ class ContentRepositoryTest {
         assertEquals("12345",requests.first().url.queryParameter("device_id"))
         assertEquals("ttreq=fixture-cookie",requests.first().header("Cookie"))
         requests.drop(1).forEach {
-            assertEquals(VendorConstants.device["device_id"],it.url.queryParameter("device_id"))
-            assertNull(it.header("Cookie"));assertEquals("GET",it.method)
+            assertEquals("23456",it.url.queryParameter("device_id"))
+            assertNull(it.header("Cookie"));assertEquals("POST",it.method)
+            assertEquals("1967",it.url.queryParameter("aid"))
+            assertEquals("/novel/player/video_model/v1/",it.url.encodedPath)
+            assertFalse(it.header("x-ss-stub").isNullOrBlank())
         }
-        assertEquals(1,registrations);assertEquals(before,session.snapshot())
+        assertEquals(1,registrations);assertEquals(before,session.profile(OkHttpClient()))
         assertTrue(session.compatibilityPlayback)
         assertFalse(Diagnostics.snapshot().contains("fixture-cookie"))
     }
 
     @Test fun emptyCompatibilityResultIsBoundedAndDoesNotLatchOrRotateTheDevice() {
         var registrations=0
-        val session=PlaybackDeviceSession(register={ _,_->registrations++;DeviceRegister.Registered("12345","67890") })
+        val session=PlaybackDeviceSession(register={ _,_->registrations++;DeviceRegister.Registered("12345","67890") },registerPlayer={ PlayerDevice("23456","78901","player-cdid","","") })
         val ids=mutableListOf<String?>()
         val repo=repository(session=session) { ids+=it.url.queryParameter("device_id");"" }
         assertThrows(EmptyContentException::class.java) { repo.stream("123") }
         val saved=session.snapshot()
         assertThrows(EmptyContentException::class.java) { repo.stream("123") }
-        assertEquals(listOf("12345",VendorConstants.device["device_id"],"12345",VendorConstants.device["device_id"]),ids)
+        assertEquals(listOf("12345","23456","12345","23456"),ids)
         assertEquals(1,registrations);assertEquals(saved,session.snapshot());assertFalse(session.compatibilityPlayback)
     }
 
@@ -144,11 +147,11 @@ class ContentRepositoryTest {
     }
 
     @Test fun emptyAndRejectedModelsExplainUpstreamFailure() {
-        assertEquals("播放接口返回空响应，请稍后重试或更新应用",assertThrows(IOException::class.java) { repository { " " }.stream("123") }.message)
+        assertEquals("兼容播放接口返回空响应，请稍后重试",assertThrows(IOException::class.java) { repository { " " }.stream("123") }.message)
         assertEquals("播放接口暂不可用（错误码 110001）",assertThrows(IOException::class.java) { repository { """{"code":110001}""" }.stream("123") }.message)
     }
 
-    @Test fun transientEmptyPlaybackIsRetriedOnlyOnceAndCanRecover() {
+    @Test fun emptyPlaybackTriesBoundedRoutesAndCanRecover() {
         var calls=0
         val repo=repository { calls++; if(calls==1) "" else inlineModel(Triple(720,"h264","https://example.com/good")) }
         assertEquals("720P",repo.stream("123").quality)
@@ -235,7 +238,7 @@ class ContentRepositoryTest {
                 .code(200).message("OK").body(respond(chain.request()).toResponseBody()).build()
         }.build(),clock,playbackSession=session ?: PlaybackDeviceSession(register={ _,_->
             DeviceRegister.Registered("3"+(1..18).joinToString("") { kotlin.random.Random.nextInt(10).toString() },"3"+(1..18).joinToString("") { kotlin.random.Random.nextInt(10).toString() })
-        })
+        },registerPlayer={ PlayerDevice("23456","78901","player-cdid","","") })
     )
 
     private fun rankPayload(page: Int = 1, totalPages: Int = 2) = JSONObject()

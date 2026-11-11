@@ -6,6 +6,10 @@ import java.io.IOException
 import java.net.SocketTimeoutException
 
 class DiagnosticsTest {
+    @Test fun wrappedEmptyResponseKeepsItsMessageWithoutDependingOnClassNames() {
+        val error=IOException("wrapper",EmptyContentException("播放接口返回空响应"))
+        assertEquals("播放接口返回空响应",Diagnostics.summary(error))
+    }
     @Test fun wrappedNetworkErrorsAreUsefulWithoutLeakingAddressOrSignature() {
         val error=IOException("https://private.example/video?signature=secret",SocketTimeoutException("secret"))
         val detail=Diagnostics.failure("视频传输",error)

@@ -7,6 +7,18 @@ import com.hongguotv.core.StreamInfo
 /** Query installed decoders once; no device database or persistent blacklist. */
 class VideoDecoderSupport {
     private val codecs by lazy { runCatching { MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.filterNot { it.isEncoder } }.getOrNull() }
+    fun softwareOnly(stream: StreamInfo): Boolean {
+        val mime=when(stream.codec.lowercase()) {
+            "h264","avc","avc1" -> "video/avc"
+            "h265","hevc","hvc1","hev1","bytevc1" -> "video/hevc"
+            else -> return false
+        }
+        val available=codecs?.filter { codec -> codec.supportedTypes.any { it.equals(mime,true) } }.orEmpty()
+        return available.isNotEmpty() && available.all { codec ->
+            if(android.os.Build.VERSION.SDK_INT>=29) codec.isSoftwareOnly
+            else codec.name.startsWith("OMX.google.") || codec.name.startsWith("c2.android.")
+        }
+    }
     fun supports(stream: StreamInfo): Boolean {
         val mime=when(stream.codec.lowercase()) {
             "h264","avc","avc1" -> "video/avc"

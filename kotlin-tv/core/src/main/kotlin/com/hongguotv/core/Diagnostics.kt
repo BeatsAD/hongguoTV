@@ -25,6 +25,7 @@ object Diagnostics {
         if(deferred!=null) return "内容服务冷却中，约 ${(deferred.retryAfterMillis+999)/1000} 秒后可重试"
         val source=PlaybackErrors.source(error)
         if(source!=null) return redact(source.message.orEmpty())
+        causes.filterIsInstance<EmptyContentException>().firstOrNull()?.let { return redact(it.message.orEmpty()) }
         return when {
             causes.any { it is java.net.UnknownHostException } -> "域名解析失败，请检查 DNS 或网络"
             causes.any { it is javax.net.ssl.SSLException } -> "HTTPS 握手失败，请检查设备时间、网络或证书兼容性"

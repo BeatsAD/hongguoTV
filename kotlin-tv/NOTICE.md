@@ -36,3 +36,9 @@ https://github.com/tsukiyo-zero/hongguoTV/blob/main/kotlin-tv/core/src/main/kotl
 提交 `a2256e8538d22b6a15bad6b464aadefcdca37d72`：
 https://github.com/N3urda/hongguoTV/commit/a2256e8538d22b6a15bad6b464aadefcdca37d72
 本地增加独立注册身份优先、仅空响应触发的有界兼容回退，并将签名内设备字段与请求参数对齐。
+
+单集兼容取址、设备注册与 Argus/Ladon 签名参考 N3urda/hongguoTV（GPL-3.0-only）
+提交 `7444bb01aec7b0420740103e551c45f1f66101c9` 的 `PlayerSource.kt`、`DeviceRegistrar.kt`、
+`Argus.kt` 和 `PlaybackModels.kt`。其中注册与签名实现派生自 ch6vip/fqapp（GPL-3.0-only）。
+本地将兼容播放身份纳入既有持久会话，保留片单与界面；只有首选接口为空才调用兼容单集接口，
+不在错误后循环更换身份，不向兼容接口携带原 App 的 Cookie。
