@@ -4,7 +4,7 @@
 
 [中文安装与使用指南](../docs/INSTALL.zh-CN.md) · [兼容性说明](../docs/COMPATIBILITY.zh-CN.md) · [界面截图](../README.md#界面展示)
 
-- 项目展示名称：hongguo；已发布 APK 的系统显示名称可能不同。
+- 应用名称：hongguo；1.0.0 起统一 APK 系统名称，历史已发布包可能不同。
 - 个人分发包名：`com.hongguotv.nativeapp.playbackfix`，沿用当前测试设备数据。历史正式包 `com.hongguotv.nativeapp` 与旧 `com.hongguotv` 独立。
 - 收藏和历史独立保存在本机，不自动迁移旧版数据。
 - APK 不含 JNI 库，可由 Android 在 ARM32、ARM64、x86、x86_64 上运行；视频解码能力依赖设备。
@@ -13,7 +13,14 @@
 
 当前个人分发渠道以 [Releases](https://github.com/BeatsAD/hongguoTV/releases/latest) 为准。下文保留各版本的功能与历史验证记录；旧版签名、包名及验收结果不代表当前个人分发包。
 
-## 个人分发版 0.10.5
+## 个人分发版 1.0.0
+
+- 显示版本为 `1.0.0`，安装包为 `hongguo-1.0.0.apk`，内部编号自动递增，不进入文件名。
+- Release 只上传 APK；新增功能与问题修复分栏说明，校验和与源码提交记录保留在内部发布记录。
+- 在线更新改读 GitHub Release API；0.10.x 首次迁移需要手动覆盖安装一次，之后继续应用内更新。沿用包名和个人签名，不卸载、不清数据。
+- 源码通过对应 Git 标签提供，旧版附件保留。版本和发布说明见 [AUTO_UPDATES.md](AUTO_UPDATES.md)；配置完成不等于已经公开发布或完成设备验收。
+
+## 历史个人分发版 0.10.5
 
 - 上游修复按固定核心文件清单生成候选 PR，保留原生界面、功能与现有测试；测试及所有者审核通过后才合并、签名发布。冲突文件留待人工移植，详见 [上游修复流水线](UPSTREAM_SYNC.md)。
 
@@ -193,13 +200,12 @@ keyPassword=your-password
 对应环境变量：`HONGGUOTV_KEYSTORE`、`HONGGUOTV_STORE_PASSWORD`、`HONGGUOTV_KEY_ALIAS`、`HONGGUOTV_KEY_PASSWORD`。覆盖更新已有安装必须继续使用其原签名，不要卸载或清除数据来绕过冲突。
 
 ```sh
-# 仓库根目录，配置既有个人签名后：按目标 Release 填写精确版本
-# 以下复现 0.10.5 的构建 10003
-HONGGUOTV_VERSION_CODE=10003 HONGGUOTV_VERSION_NAME=0.10.5+3 ./kotlin-tv/gradlew -p kotlin-tv :app:lintDistribution :app:assembleDistribution --console=plain
-# 输出：kotlin-tv/app/build/outputs/apk/distribution/app-distribution.apk
+# 仓库根目录，配置既有个人签名且源码已提交后执行
+./scripts/build-kotlin.sh
+# 自动分配内部编号；输出 outputs/releases/v1.0.0/hongguo-1.0.0.apk
 ```
 
-渠道版本基线来自 `distribution/channel.properties`，本地 Debug 默认版本来自 `app/build.gradle.kts`；二者用途不同。云端构建号递增规则及复现步骤见 [AUTO_UPDATES.md](AUTO_UPDATES.md)。`scripts/build-kotlin.sh` 用于历史 `release` 包，不构建个人渠道的 `distribution` 包。
+版本基线来自 `distribution/channel.properties`。本地打包和 CI 均自动分配隐藏的构建号，正式版本不带调试后缀；直接调用 distribution Gradle 任务时必须提供已分配的版本环境。`scripts/build-kotlin.sh` 现在构建个人渠道的 `distribution` 包，不会上传，详情见 [AUTO_UPDATES.md](AUTO_UPDATES.md)。
 
 ## 工程结构
 

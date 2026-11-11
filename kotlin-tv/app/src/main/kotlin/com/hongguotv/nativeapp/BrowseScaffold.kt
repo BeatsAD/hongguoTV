@@ -24,7 +24,7 @@ internal class BrowseScaffold(context: Context,route: String,type: ContentType,n
         addView(side,LayoutParams(ui.dp(BrowseLayout.sidebar(width,resources.configuration.fontScale).toInt()),-1))
         val brand=ui.row().apply { setPadding(ui.dp(7),0,0,0) }
         brand.addView(ImageView(context).apply { setImageResource(R.drawable.app_icon) },LayoutParams(ui.dp(28),ui.dp(28)))
-        brand.addView(ui.text("红果 TV",18f).apply { maxLines=1;typeface=android.graphics.Typeface.DEFAULT_BOLD },LayoutParams(-2,-2).apply { leftMargin=ui.dp(9) })
+        brand.addView(ui.text("hongguo",18f).apply { maxLines=1;typeface=android.graphics.Typeface.DEFAULT_BOLD },LayoutParams(-2,-2).apply { leftMargin=ui.dp(9) })
         side.addView(brand,LayoutParams(-1,-2).apply { bottomMargin=ui.dp(16) })
         val navBody=ui.column()
         val navScroll=TvScrollView(context).apply { clipToPadding=false;setPadding(ui.dp(6),ui.dp(6),ui.dp(6),ui.dp(6));addView(navBody) }

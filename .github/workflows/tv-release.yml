@@ -108,6 +108,7 @@ jobs:
       - name: Restore existing personal signing identity and assign build number
         env:
           KEYSTORE_B64: ${{ secrets.HONGGUOTV_KEYSTORE_B64 }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           test -n "$KEYSTORE_B64"
@@ -121,26 +122,26 @@ jobs:
           HONGGUOTV_KEY_ALIAS: ${{ secrets.HONGGUOTV_KEY_ALIAS }}
           HONGGUOTV_KEY_PASSWORD: ${{ secrets.HONGGUOTV_KEY_PASSWORD }}
         run: ./kotlin-tv/gradlew -p kotlin-tv :app:lintDistribution :app:assembleDistribution --console=plain
-      - name: Verify APK identity and prepare immutable assets
+      - name: Verify APK identity and prepare APK-only release
         id: assets
         env:
           REVIEWED_PULL_REQUEST: ${{ needs.review_gate.outputs.pull_request }}
         run: |
-          metadata=$(python3 scripts/tv-update.py prepare --apk kotlin-tv/app/build/outputs/apk/distribution/app-distribution.apk)
-          echo "manifest=$metadata" >> "$GITHUB_OUTPUT"
-      - name: Publish verified assets then promote latest
+          record=$(python3 scripts/tv-update.py prepare --apk kotlin-tv/app/build/outputs/apk/distribution/app-distribution.apk)
+          echo "record=$record" >> "$GITHUB_OUTPUT"
+      - name: Publish verified APK then promote latest
         env:
           GH_TOKEN: ${{ github.token }}
-          UPDATE_MANIFEST: ${{ steps.assets.outputs.manifest }}
-        run: python3 scripts/tv-update.py publish --manifest "$UPDATE_MANIFEST"
+          RELEASE_RECORD: ${{ steps.assets.outputs.record }}
+        run: python3 scripts/tv-update.py publish --record "$RELEASE_RECORD"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
           name: distribution-verification
           path: |
             kotlin-tv/app/build/reports/lint-results-distribution.*
-            outputs/releases/**/update.json
-            outputs/releases/**/SHA256SUMS
+            outputs/releases/**/release-record.json
+            outputs/releases/**/release-notes.md
       - name: Remove this job's temporary signing file
         if: always()
         run: rm -f "$RUNNER_TEMP/hongguotv-update.jks"
