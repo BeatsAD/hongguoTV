@@ -38,7 +38,6 @@ class MainActivity: Activity() {
     private val decoderSupport=VideoDecoderSupport()
     private val playbackAttempt=PlaybackAttempt()
     private var saveStatusView: TextView?=null
-    private var restoreAwaitingSave=false
     private val networkCleanup=Executors.newSingleThreadExecutor()
     private val prefetchWorker=Executors.newSingleThreadExecutor()
     private var prefetchHttp: okhttp3.OkHttpClient?=null
@@ -231,7 +230,6 @@ class MainActivity: Activity() {
             next?.takeIf { it.isShown }?.requestFocus()
         }
         if(state==Library.SaveState.FAILED) Toast.makeText(this,"本机改动尚未保存，请检查可用空间后重试",Toast.LENGTH_LONG).show()
-        else if(restoreAwaitingSave) { restoreAwaitingSave=false; Toast.makeText(this,"记录已合并并保存",Toast.LENGTH_LONG).show() }
     }
     private fun loadCover(view: ImageView,url: String) {
         var ancestor: View?=view
@@ -330,8 +328,8 @@ class MainActivity: Activity() {
     private fun settings(parent: LinearLayout) {
         pageTitle(parent,"设置")
         val groups=column()
-        val playback=column(); val device=column(); val about=column()
-        listOf(playback,device,about).forEach { group ->
+        val playback=column(); val about=column()
+        listOf(playback,about).forEach { group ->
             groups.addView(group,lp(-1,-2).apply { bottomMargin=dp(20) })
         }
         parent.addView(groups)
@@ -342,7 +340,7 @@ class MainActivity: Activity() {
         }
         fun separator(panel: LinearLayout) { if(panel.childCount>0) panel.addView(View(this).apply { setBackgroundColor(TvStyle.outline) },lp(-1,dp(1)).apply { leftMargin=dp(56) }) }
         fun setting(group: LinearLayout,label: String,action: ()->Unit): TextView {
-            val kind=when { label.startsWith("默认清晰度")->TvGlyph.Kind.QUALITY; label.startsWith("默认倍速")->TvGlyph.Kind.SPEED; label.startsWith("画面")->TvGlyph.Kind.FRAME; label.startsWith("手机")->TvGlyph.Kind.TRANSFER; label.startsWith("恢复")->TvGlyph.Kind.EYE; label.startsWith("开源")->TvGlyph.Kind.CODE; else->TvGlyph.Kind.INFO }
+            val kind=when { label.startsWith("默认清晰度")->TvGlyph.Kind.QUALITY; label.startsWith("默认倍速")->TvGlyph.Kind.SPEED; label.startsWith("画面")->TvGlyph.Kind.FRAME; label.startsWith("开源")->TvGlyph.Kind.CODE; else->TvGlyph.Kind.INFO }
             val panel=panels.getValue(group); separator(panel)
             return PreferenceRow(this,label,kind).apply {
                 focusStyle(this); setOnClickListener { action() }
@@ -351,7 +349,6 @@ class MainActivity: Activity() {
             }
         }
         heading(playback,"播放偏好")
-        heading(device,"片单与设备")
         lateinit var qualityButton: TextView
         qualityButton=setting(playback,"默认清晰度  ·  ${library.maxQuality}P") { showQualityPicker(qualityButton,false) }
         lateinit var defaultSpeed: TextView
@@ -372,22 +369,6 @@ class MainActivity: Activity() {
             setOnCheckedChangeListener { _,checked -> library.autoNext=checked }; panels.getValue(playback).addView(this,lp(-1,-2))
         }
         playback.addView(text("偏好自动保存，所有剧集共用。",12f,muted).apply { setPadding(dp(12),dp(12),0,0) })
-        lateinit var backup: TextView
-        backup=setting(device,"手机备份与恢复") {
-            runCatching { LibraryBackup.encode(library.snapshot()) }.onSuccess { encoded ->
-                tvTools.libraryTransfer(encoded,backup) { data,restoreSettings ->
-                    favoriteMonitor.stop(); restoreAwaitingSave=true; library.restore(data,restoreSettings)
-                    browser.trimMemory()
-                    showCatalog()
-                    Toast.makeText(this,"记录已合并，正在保存…",Toast.LENGTH_SHORT).show()
-                }
-            }.onFailure { tvTools.info("无法生成备份","本机记录暂时无法导出，请重试。",backup) }
-        }
-        lateinit var hidden: TextView
-        hidden=setting(device,"恢复隐藏推荐  ·  ${library.hidden().size} 部") {
-            library.unhideAll(); hidden.text="恢复隐藏推荐  ·  0 部"; Toast.makeText(this,"热门推荐已恢复",Toast.LENGTH_SHORT).show()
-        }
-        device.addView(text("收藏与观看进度保存在本机。",12f,muted).apply { setPadding(dp(14),dp(12),0,dp(25)) })
         heading(about,"关于")
         lateinit var updates: TextView
         updates=setting(about,"${if(BuildConfig.ONLINE_UPDATES) "版本与更新" else "应用版本"}  ${BuildConfig.VERSION_NAME}") { updater.show(updates) }
@@ -395,7 +376,7 @@ class MainActivity: Activity() {
         diagnostics=setting(about,"诊断信息") { tvTools.diagnostics(diagnostics) }
         lateinit var license: TextView
         license=setting(about,"开源许可") { tvTools.info("开源许可","本原生版以 GPL-3.0 发布。\n内容协议与加密处理移植自 drpys（22261ad）。\nAndroidX Media3 / OkHttp：Apache-2.0\nKotlin：Apache-2.0\nBouncy Castle：MIT\n完整源码和许可证见 GitHub：${BuildConfig.UPDATE_REPOSITORY}。",license) }
-        val items=listOf(qualityButton,defaultSpeed,frame,autoNextButton,backup,hidden,updates,diagnostics,license)
+        val items=listOf(qualityButton,defaultSpeed,frame,autoNextButton,updates,diagnostics,license)
         items.forEachIndexed { index,view ->
             view.nextFocusUpId=items.getOrNull(index-1)?.id ?: nav[tab].id
             view.nextFocusDownId=items.getOrNull(index+1)?.id ?: view.id
