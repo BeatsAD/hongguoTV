@@ -178,6 +178,16 @@ def checks_pass(checks, sha, required):
     return all(name in latest and latest[name]["status"] == "completed" and latest[name]["conclusion"] == "success" for name in required)
 
 
+def native_checks(config, pr):
+    sha = pr["head"]["sha"]
+    runs = api(f'repos/{config["repository"]}/actions/workflows/tv-release.yml/runs?head_sha={sha}&per_page=100')["workflow_runs"]
+    # A successful workflow_dispatch job is useful evidence but cannot satisfy
+    # GitHub's native PR protection. Never count it as a merge check here.
+    suites = {run["check_suite_id"] for run in runs if run["head_sha"] == sha and run["head_branch"] == pr["head"]["ref"] and run["event"] == "pull_request"}
+    checks = api(f'repos/{config["repository"]}/commits/{sha}/check-runs?per_page=100')["check_runs"]
+    return [check for check in checks if check.get("check_suite", {}).get("id") in suites]
+
+
 def runtime_changed(paths):
     return any(path.startswith(("kotlin-tv/app/src/main/", "kotlin-tv/app/src/distribution/", "kotlin-tv/core/src/main/", "kotlin-tv/gradle/")) or path in {
         "kotlin-tv/app/build.gradle.kts", "kotlin-tv/core/build.gradle.kts", "kotlin-tv/build.gradle.kts",
@@ -220,6 +230,52 @@ def ensure_verification(config, branch, sha):
         api(f'repos/{config["repository"]}/actions/workflows/tv-release.yml/dispatches', "POST", {"ref": branch})
         return True
     return False
+
+
+def is_automatic_proposal(config, pr):
+    return not pr.get("draft") and pr.get("user", {}).get("login") == "github-actions[bot]" and (pr["head"].get("repo") or {}).get("full_name") == config["repository"] and pr["head"]["ref"].startswith(config["candidatePrefix"])
+
+
+def update_candidate_base(repo, config, pr):
+    """Merge current main only after proving the existing proposal is unmodified."""
+    if not is_automatic_proposal(config, pr):
+        return False
+    sha = pr["head"]["sha"]
+    repo.git("fetch", "origin", "main")
+    base = repo.git("rev-parse", "FETCH_HEAD")
+    repo.git("fetch", "origin", sha)
+    if repo.ancestor(base, sha):
+        return False
+    previous_base = repo.git("merge-base", base, sha)
+    fetch_upstream(repo, config)
+    verify_candidate(repo, config, previous_base, sha, pr["head"]["ref"])
+    api(f'repos/{config["repository"]}/pulls/{pr["number"]}/update-branch', "PUT", {"expected_head_sha": sha})
+    print(f'PR #{pr["number"]}: updating main baseline; tests and human review must match the new head.')
+    return True
+
+
+def activate_candidate_checks(repo, config, pr):
+    """Start native PR checks only for a recomputed, unchanged bot proposal.
+
+    Workflow approval permits CI to run; it never approves the proposed code.
+    Dispatch checks alone are deliberately insufficient for branch protection.
+    """
+    if not is_automatic_proposal(config, pr):
+        return False
+    sha = pr["head"]["sha"]
+    runs = api(f'repos/{config["repository"]}/actions/workflows/tv-release.yml/runs?head_sha={sha}&per_page=100')["workflow_runs"]
+    pending = [run for run in runs if run["head_sha"] == sha and run["head_branch"] == pr["head"]["ref"] and run["event"] == "pull_request" and run.get("conclusion") == "action_required" and run.get("path") == ".github/workflows/tv-release.yml" and run.get("head_repository", {}).get("full_name") == config["repository"] and any(item["number"] == pr["number"] for item in run.get("pull_requests", []))]
+    if not pending:
+        return False
+    repo.git("fetch", "origin", "main")
+    base = repo.git("rev-parse", "FETCH_HEAD")
+    repo.git("fetch", "origin", sha)
+    fetch_upstream(repo, config)
+    verify_candidate(repo, config, base, sha, pr["head"]["ref"])
+    for run in pending:
+        api(f'repos/{config["repository"]}/actions/runs/{run["id"]}/approve', "POST")
+        print(f'PR #{pr["number"]}: activated native CI run {run["id"]}; human code review is still required.')
+    return True
 
 
 def propose_local(config, branch):
@@ -336,11 +392,14 @@ def reconcile(repo, config):
         if item["draft"] or (item["head"].get("repo") or {}).get("full_name") != config["repository"] or not item["head"]["ref"].startswith(config["candidatePrefix"]):
             continue
         pr = api(f'repos/{config["repository"]}/pulls/{item["number"]}')
+        if update_candidate_base(repo, config, pr):
+            continue
+        activate_candidate_checks(repo, config, pr)
         reviews = all_reviews(config["repository"], pr["number"])
         if not approved(reviews, pr["head"]["sha"], config["reviewer"]):
             print(f'PR #{pr["number"]}: waiting for human approval of current SHA.')
             continue
-        checks = api(f'repos/{config["repository"]}/commits/{pr["head"]["sha"]}/check-runs?per_page=100')["check_runs"]
+        checks = native_checks(config, pr)
         if not checks_pass(checks, pr["head"]["sha"], config["requiredChecks"]):
             print(f'PR #{pr["number"]}: waiting for required tests.')
             continue
