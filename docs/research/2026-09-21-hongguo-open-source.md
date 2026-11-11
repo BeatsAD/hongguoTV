@@ -1,25 +1,25 @@
-# 红果接口开源项目调研
+# hongguo 接口开源项目调研
 
 调研日期：2026-09-21。目标：为 Android TV 客户端寻找现成的搜索、剧集详情与播放接口实现。
 
 ## 结论与验证范围
 
-找到了直接请求红果/番茄平台域名的公开源码，可以作为接口研究起点。优先验证 `woshishiq1/drpys` 的 `红果果[短].js` 和 `zhenyong97/hongguo-downloader` 的 `src/native/hongguo.js`。
+找到了直接请求 hongguo/番茄平台域名的公开源码，可以作为接口研究起点。优先验证 `woshishiq1/drpys` 的 hongguo 内容脚本（见下方链接）和 `zhenyong97/hongguo-downloader` 的 `src/native/hongguo.js`。
 
-本次通过 GitHub API 核对仓库目录、关键源码、许可证元数据和关键文件最近提交；未运行下载器、签名或视频处理代码，未登录红果，也未验证真实视频播放。下列“实现”均指源码中存在对应逻辑，不代表接口目前调用成功或长期稳定。
+本次通过 GitHub API 核对仓库目录、关键源码、许可证元数据和关键文件最近提交；未运行下载器、签名或视频处理代码，未登录 hongguo，也未验证真实视频播放。下列“实现”均指源码中存在对应逻辑，不代表接口目前调用成功或长期稳定。
 
 ## 主要候选
 
 ### 1. woshishiq1/drpys：优先参考 TV 源的完整调用流程
 
 - [仓库](https://github.com/woshishiq1/drpys)
-- [关键源码：红果果[短].js](https://github.com/woshishiq1/drpys/blob/22261adfa31435e3b3ef5a730b8a2a75bcaf1715/spider/js/%E7%BA%A2%E6%9E%9C%E6%9E%9C%5B%E7%9F%AD%5D.js)
+- [关键源码：hongguo 内容脚本](https://github.com/woshishiq1/drpys/blob/22261adfa31435e3b3ef5a730b8a2a75bcaf1715/spider/js/%E7%BA%A2%E6%9E%9C%E6%9E%9C%5B%E7%9F%AD%5D.js)
 - 关键文件最近提交：2026-09-14；GitHub 识别的仓库许可证：GPL-3.0。
 - 官网数据用于分类、榜单和详情；App 搜索失败时回退官网搜索。
 - 包含视频信息请求、请求签名、清晰度选择及流式播放代理逻辑，依赖 Node 的 crypto、Buffer、axios 和 drpys 运行时。
 - 核心入口：`appSearchPage()`、`requestVideoModel()`、`fetchVideoInfo()`，以及规则对象中的“二级”“搜索”“lazy”“proxy_rule”。
 - 源码存在固定设备参数；其有效性和运行时依赖需要实测。
-- 注意区别：同仓库的 `红果短剧[短].js` 另依赖本地 `hongguo-bridge` 服务，不能只复制该文件就认为播放能力完整。`红果果[短].js` 则将相应处理逻辑放在源文件内。
+- 注意区别：同仓库的另一桥接脚本（文件名 URL 编码为 `%E7%BA%A2%E6%9E%9C%E7%9F%AD%E5%89%A7%5B%E7%9F%AD%5D.js`）另依赖本地 `hongguo-bridge` 服务，不能只复制该文件就认为播放能力完整。上方关键源码链接中的内容脚本则将相应处理逻辑放在源文件内。
 - 对本项目的价值：优先验证搜索 → 详情 → 选集 → 播放的调用顺序；Android 遥控器界面需要另做。
 
 ### 2. zhenyong97/hongguo-downloader：接口代码集中，便于阅读
@@ -62,13 +62,13 @@
 | [dawei233/hongguo-monorepo](https://github.com/dawei233/hongguo-monorepo) | PC、Android、NAS 多端方案；`nas-backend/hongguo_core.py` 包含搜索、详情、视频信息请求，签名依赖随仓库提供的 liushen 模块；README 表明 Android 端依赖局域网 NAS 后端。GitHub 未识别到许可证。 |
 | [gybeyond1/hongguo-dl](https://github.com/gybeyond1/hongguo-dl) | `docker/hongguo_core.py` 存在分集和视频信息请求，使用与 zhenyong97 项目相近的预加载接口及固定设备参数。GitHub 未识别到许可证。 |
 | [huangxd-/danmu_api](https://github.com/huangxd-/danmu_api/blob/main/danmu_api/sources/hongguo.js) | 搜索、分集与弹幕请求可参考；其产品目标是弹幕服务，不是完整视频播放客户端。GitHub 识别许可证为 AGPL-3.0。 |
-| [ucmao/media-parser](https://github.com/ucmao/media-parser/blob/main/src/parsers/fanqie_parser.py) | 红果模块解析分享/推广页的 HTML，提取视频、封面等字段；不等于提供完整搜索和选集能力。GitHub 识别许可证为 MIT。 |
-| [zhangbaio/hongguo-downloader](https://github.com/zhangbaio/hongguo-downloader/blob/main/core/api_client.py) | 客户端调用 `orz.icic.icu` 第三方服务，部分请求传入 key 和 machine_id；没有因此获得红果平台接口的独立实现。 |
+| [ucmao/media-parser](https://github.com/ucmao/media-parser/blob/main/src/parsers/fanqie_parser.py) | hongguo 模块解析分享/推广页的 HTML，提取视频、封面等字段；不等于提供完整搜索和选集能力。GitHub 识别许可证为 MIT。 |
+| [zhangbaio/hongguo-downloader](https://github.com/zhangbaio/hongguo-downloader/blob/main/core/api_client.py) | 客户端调用 `orz.icic.icu` 第三方服务，部分请求传入 key 和 machine_id；没有因此获得 hongguo 平台接口的独立实现。 |
 | [Erlmo/shortplay](https://github.com/Erlmo/shortplay) | Flutter 播放器；README 明确说明相关签名/密钥算法未开源，需要另外准备接口，不能单靠这个仓库解决内容接入。 |
 
 ## 源码中出现的调用路径
 
-以下为源码中观察到的路径，不是红果官方开放 API 文档，也不是已验证可用的请求示例。
+以下为源码中观察到的路径，不是 hongguo 官方开放 API 文档，也不是已验证可用的请求示例。
 
 | 用途 | 路径 | 证据 |
 | --- | --- | --- |

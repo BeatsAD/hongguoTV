@@ -1,6 +1,6 @@
 ---
 version: alpha
-name: 红果 TV 全应用设计方案 V2
+name: hongguo 全应用设计方案 V2
 description: 2026-10-28，原生V2设计与验收契约；实施验证记录见本地验证报告
 colors:
   primary: "#BB3D5D"
@@ -150,7 +150,7 @@ components:
     typography: "{typography.control}"
 ---
 
-# 红果 TV 全应用设计方案 V2
+# hongguo 全应用设计方案 V2
 
 ## Overview
 
@@ -360,4 +360,4 @@ components:
 
 禁止：当前集下划线、主色黑字、满屏红底、每个按钮都渐变、焦点闪烁、文字入口过小、单靠色彩区分状态、隐藏可操作区、靠修改设备密度适配、把生成图片标为真机截图、把现有未提交工作合并到本方案提交。
 
-参考：[Android TV焦点系统](https://developer.android.com/design/ui/tv/guides/styles/focus-system)、[按钮](https://developer.android.com/design/ui/tv/guides/components/buttons)、[导航](https://developer.android.com/training/tv/get-started/navigation)。官方规范提供原则；本方案的色值、尺寸、列数与状态表是红果TV的项目决策。
+参考：[Android TV焦点系统](https://developer.android.com/design/ui/tv/guides/styles/focus-system)、[按钮](https://developer.android.com/design/ui/tv/guides/components/buttons)、[导航](https://developer.android.com/training/tv/get-started/navigation)。官方规范提供原则；本方案的色值、尺寸、列数与状态表是 hongguo 的项目决策。

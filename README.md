@@ -1,6 +1,6 @@
-# 红果 TV
+# hongguo
 
-![红果 TV 封面：大屏看短剧](docs/assets/hongguo-tv-cover.png)
+![hongguo 封面：大屏看短剧](docs/assets/hongguo-tv-cover.png)
 
 **简体中文** · [安装与使用](docs/INSTALL.zh-CN.md) · [兼容性](docs/COMPATIBILITY.zh-CN.md) · [Bug 反馈](https://github.com/BeatsAD/hongguoTV/issues/new?template=bug_report.yml) · [功能建议](https://github.com/BeatsAD/hongguoTV/issues/new?template=feature_request.yml)
 
@@ -16,9 +16,9 @@
 
 | 首页与剧架 | 版本与更新 |
 | --- | --- |
-| ![红果 TV 首页，构建 10003 的实际模拟器截图](docs/assets/screenshots/home-0.10.5-build10003.png) | ![红果 TV 版本与更新，构建 10003 的实际模拟器截图](docs/assets/screenshots/updates-0.10.5-build10003.png) |
+| ![hongguo 首页展示图，基于构建 10003 的模拟器截图](docs/assets/screenshots/home-0.10.5-build10003.png) | ![hongguo 版本与更新展示图，基于构建 10003 的模拟器截图](docs/assets/screenshots/updates-0.10.5-build10003.png) |
 
-截图来自 `0.10.5+3-playbackfix / 10003` 在 Android TV API 31 模拟器上的实际运行，未重绘界面；它们展示该版本界面，不代表实体电视验收。封面为 AI 生成宣传插画。素材来源与校验见[展示素材说明](docs/assets/README.md)。
+展示图以 `0.10.5+3-playbackfix / 10003` 在 Android TV API 31 模拟器上的实际截图为参考，经 AI 编辑统一使用 `hongguo` 名称；属于展示示意图，细节以实际应用为准，不用于像素对照或实体电视验收。封面为 AI 生成宣传插画。素材来源与校验见[展示素材说明](docs/assets/README.md)。
 
 ## 当前功能
 
@@ -28,12 +28,12 @@
 - **手机辅助**：同一局域网扫码输入剧名，或备份与恢复本机片单和观看记录。
 - **应用内更新**：个人分发版支持检查和下载新版，校验后交由电视系统确认安装。
 
-收藏、观看进度与设置保存在本机，**尚不支持红果 / 抖音账号登录或云端同步**。手机扫码用于搜索和本机备份，不是平台账号登录入口。
+收藏、观看进度与设置保存在本机，**尚不支持 hongguo / 抖音账号登录或云端同步**。手机扫码用于搜索和本机备份，不是平台账号登录入口。
 
 ## 在电视上使用
 
 1. 打开[本仓库 Releases](https://github.com/BeatsAD/hongguoTV/releases/latest)，下载附件中的 `.apk` 文件，复制到电视或盒子安装。设备需要 Android 8.0 或更新版本，并能联网。
-2. 在应用列表打开「红果 TV」，进入首页或搜索，选择剧集开始观看。无需另行启动电脑或 NAS 内容服务。
+2. 安装后从电视应用列表打开客户端，进入首页或搜索，选择剧集开始观看。无需另行启动电脑或 NAS 内容服务。
 3. 后续在「设置 → 版本与更新」检查更新。首次安装更新时，按系统提示允许本应用安装未知来源应用；下载完成后仍需确认系统安装。
 
 个人分发包名为 `com.hongguotv.nativeapp.playbackfix`，沿用现有个人签名，关闭调试。与本渠道同包名、同签名且版本更低的已有安装可覆盖升级，保留本机记录。早期不带在线更新的开发版需要先手动覆盖安装一次，再使用应用内更新。
@@ -117,7 +117,7 @@ U 盘安装、ADB 示例、备份恢复与常见问题见[中文安装与使用�
 
 ## 来源与许可证
 
-项目与红果官方无关联。原生源码及派生实现按 GPL-3.0-only 发布，详见 [LICENSE](LICENSE) 和[原生版第三方声明](kotlin-tv/NOTICE.md)；第三方部分保留各自许可。
+项目与 hongguo 官方无关联。原生源码及派生实现按 GPL-3.0-only 发布，详见 [LICENSE](LICENSE) 和[原生版第三方声明](kotlin-tv/NOTICE.md)；第三方部分保留各自许可。
 
 新增的独立 Bug、功能建议和 PR 模板采用 [MIT](LICENSES/MIT-community-templates.txt)，方便其他项目复用。**MIT 仅覆盖这三个模板，不改变应用及 GPL 派生代码的许可证。** 完整范围见[中文许可说明](docs/LICENSING.zh-CN.md)。
 

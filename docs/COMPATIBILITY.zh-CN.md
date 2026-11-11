@@ -34,7 +34,7 @@
 
 - 当前源码已通过 `:core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug`。个人分发流水线还执行签名构建与 APK 身份检查。
 - `0.10.5+3-playbackfix / 10003` 在 Android TV API 31 / ARM64 模拟器上完成系统覆盖升级、启动、版本检查及可导出业务数据对比。该次 GitHub 下载使用了测试环境的网络代理。
-- README 中的首页和更新截图来自该模拟器上的实际运行，属于界面展示；该轮升级验证没有新增视频首帧、换集、长时播放或实体电视验收。
+- README 中的首页和更新展示图以该模拟器上的实际截图为参考，经 AI 编辑统一使用 `hongguo` 名称，细节以实际应用为准；不能用于像素对照。该轮升级验证没有新增视频首帧、换集、长时播放或实体电视验收。
 - 既往开发版本有模拟器播放和部分电视测试记录，不能推导为当前分发包在所有设备通过。Android 8.0 真机、不同芯片解码与音频输出、特殊遥控器和长时稳定性仍需按设备验证。
 
 模拟器升级记录对应的公开版本为[构建 10003](https://github.com/BeatsAD/hongguoTV/releases/tag/kotlin-v0.10.5-build.10003)，自动化发布记录见[该次工作流](https://github.com/BeatsAD/hongguoTV/actions/runs/42954622658)。这些证据不能保证未来第三方接口、网络或内容持续可用。
