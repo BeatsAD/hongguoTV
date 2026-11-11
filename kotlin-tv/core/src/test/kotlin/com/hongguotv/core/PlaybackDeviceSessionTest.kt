@@ -7,6 +7,29 @@ import org.junit.Test
 import java.util.zip.GZIPInputStream
 
 class PlaybackDeviceSessionTest {
+    @Test fun compatibilityIdentityIsPersistedAndDoesNotReplaceCatalogIdentity() {
+        var calls=0
+        val session=PlaybackDeviceSession(register={ _,_->DeviceRegister.Registered("123","456") },
+            registerPlayer={ calls++;PlayerDevice("789","234","cdid","openudid","") })
+        val catalog=session.profile(OkHttpClient())
+        val player=session.playerProfile(OkHttpClient())
+        assertEquals(player,session.playerProfile(OkHttpClient()));assertEquals(1,calls)
+        assertEquals(catalog,session.profile(OkHttpClient()))
+        val restored=PlaybackDeviceSession(registerPlayer={error("must reuse persisted identity")})
+        restored.restore(session.snapshot())
+        assertEquals(player,restored.playerProfile(OkHttpClient()))
+        assertEquals(catalog,restored.profile(OkHttpClient()))
+    }
+    @Test fun failedCompatibilityRegistrationHasAPersistedCooldown() {
+        var calls=0
+        val session=PlaybackDeviceSession(clock={1000},registerPlayer={calls++;throw java.io.IOException("offline")})
+        assertThrows(java.io.IOException::class.java) { session.playerProfile(OkHttpClient()) }
+        assertThrows(ContentRequestDeferredException::class.java) { session.playerProfile(OkHttpClient()) }
+        val restored=PlaybackDeviceSession(clock={1000},registerPlayer={error("must respect cooldown")})
+        restored.restore(session.snapshot())
+        assertThrows(ContentRequestDeferredException::class.java) { restored.playerProfile(OkHttpClient()) }
+        assertEquals(1,calls)
+    }
     @Test fun registrationWirePayloadHasRequiredTypesAndNoInventedServerIds() {
         val payload=DeviceRegister.payload(VendorConstants.device+("cdid" to "fixture"),1234)
         assertArrayEquals(byteArrayOf(0x74,0x63,5,0x10,0,0),payload.copyOfRange(0,6))

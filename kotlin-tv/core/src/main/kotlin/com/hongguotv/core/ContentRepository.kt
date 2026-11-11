@@ -209,7 +209,7 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
             catch(failure: EmptyContentException) {
                 Diagnostics.failure("播放取址",failure)
                 if(attempt==1 || Thread.currentThread().isInterrupted) throw failure
-                Diagnostics.record("播放取址",if(compatibility) "空数据，仅重新取址一次" else "注册身份取址为空，仅尝试一次上游兼容请求；保留本机身份")
+                Diagnostics.record("播放取址",if(compatibility) "兼容接口为空，仅重试一次" else "首选取址为空，尝试上游单集兼容接口；保留本机身份")
                 compatibility=true
             }
         }
@@ -220,13 +220,20 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
         require(id.matches(Regex("[0-9]{1,30}")))
         // Current signed GET and nested model layout: N3urda/hongguoTV a2256e8, GPL-3.0.
         // Keep each identity's query/signature/cookie together; never rotate registration on errors.
-        val identity=if(compatibility) PlaybackDeviceSession.Profile(VendorConstants.device,"") else playbackSession.profile(http)
-        val signed=signer.sign("https://api5-normal-sinfonlineb.fqnovel.com/reading/bookapi/video_tab/multi_video_model/v1/",identity.values+mapOf(
-            "video_id" to id,"video_id_type" to "0","device_level" to "1","need_all_video_definition" to "1",
-            "need_mp4_align" to "0","use_os_player" to "0","video_platform" to "1024","source" to "0","from_video_id" to ""
-        ))
-        val request=if(identity.cookie.isBlank()) signed else signed.copy(headers=signed.headers+("Cookie" to identity.cookie))
-        val response=text(request.url,request,timeoutMillis=10_000,metadata=false)
+        val response=if(compatibility) {
+            val device=playbackSession.playerProfile(http)
+            val request=RegisteredPlayer.request(id,device)
+            val body=text(request.url,request,timeoutMillis=10_000,metadata=false)
+            RegisteredPlayer.normalize(body,id)
+        } else {
+            val identity=playbackSession.profile(http)
+            val signed=signer.sign("https://api5-normal-sinfonlineb.fqnovel.com/reading/bookapi/video_tab/multi_video_model/v1/",identity.values+mapOf(
+                "video_id" to id,"video_id_type" to "0","device_level" to "1","need_all_video_definition" to "1",
+                "need_mp4_align" to "0","use_os_player" to "0","video_platform" to "1024","source" to "0","from_video_id" to ""
+            ))
+            val request=if(identity.cookie.isBlank()) signed else signed.copy(headers=signed.headers+("Cookie" to identity.cookie))
+            text(request.url,request,timeoutMillis=10_000,metadata=false)
+        }
         if(response.isBlank()) throw EmptyContentException("播放接口返回空响应，请稍后重试或更新应用")
         val data=try { JSONObject(response) } catch(_: Exception) { throw PlaybackSourceException(PlaybackFailureKind.FORMAT,"播放信息格式已变化，请更新应用") }
         val code=data.optInt("Code",data.optInt("code",0))
