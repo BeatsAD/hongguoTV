@@ -179,9 +179,10 @@ def checks_pass(checks, sha, required):
 
 
 def runtime_changed(paths):
-    return any(path.startswith(("kotlin-tv/app/src/main/", "kotlin-tv/core/src/main/", "kotlin-tv/gradle/")) or path in {
+    return any(path.startswith(("kotlin-tv/app/src/main/", "kotlin-tv/app/src/distribution/", "kotlin-tv/core/src/main/", "kotlin-tv/gradle/")) or path in {
         "kotlin-tv/app/build.gradle.kts", "kotlin-tv/core/build.gradle.kts", "kotlin-tv/build.gradle.kts",
-        "kotlin-tv/settings.gradle.kts", "kotlin-tv/distribution/channel.properties"} for path in paths)
+        "kotlin-tv/settings.gradle.kts", "kotlin-tv/distribution/channel.properties", "kotlin-tv/app/proguard-rules.pro",
+        "kotlin-tv/gradle.properties"} for path in paths)
 
 
 def review_gate(prs, reviews_by_number, sha, reviewer, changed_paths):

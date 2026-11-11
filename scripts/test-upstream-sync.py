@@ -204,6 +204,11 @@ class ReviewTests(unittest.TestCase):
         self.assertIsNone(sync.review_gate([pr], {}, "main", "BeatsAD", [SOURCE]))
         self.assertIsNone(sync.review_gate([pr], {7: [self.review()]}, "main", "BeatsAD", [sync.STATE, "scripts/upstream-sync.py"]))
 
+    def test_approved_apk_build_input_only_fixes_can_publish(self):
+        pr = {"number":7,"merged_at":"now","merge_commit_sha":"main","base":{"ref":"main"},"head":{"sha":"candidate"},"draft":False}
+        for path in ['kotlin-tv/app/proguard-rules.pro','kotlin-tv/gradle.properties','kotlin-tv/app/src/distribution/AndroidManifest.xml']:
+            self.assertEqual(7,sync.review_gate([pr],{7:[self.review()]},'main','BeatsAD',[path]))
+
     def test_token_created_pr_explicitly_dispatches_validation(self):
         pending = {"workflow_runs": [{"event": "pull_request", "head_sha": "candidate"}]}
         with patch.object(sync, "api", side_effect=[pending, None]) as api:
