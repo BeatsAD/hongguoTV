@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "observed": "eea73e6a45569a2cbbb9440f7cd5290c459b0b70",
+  "files": {
+    "kotlin-tv/core/src/main/kotlin/com/hongguotv/core/Bytes.kt": "eea73e6a45569a2cbbb9440f7cd5290c459b0b70",
+    "kotlin-tv/core/src/main/kotlin/com/hongguotv/core/ContentRepository.kt": "eea73e6a45569a2cbbb9440f7cd5290c459b0b70",
+    "kotlin-tv/core/src/main/kotlin/com/hongguotv/core/DeviceRegister.kt": "eea73e6a45569a2cbbb9440f7cd5290c459b0b70",
+    "kotlin-tv/core/src/main/kotlin/com/hongguotv/core/MediaCrypto.kt": "eea73e6a45569a2cbbb9440f7cd5290c459b0b70",
+    "kotlin-tv/core/src/main/kotlin/com/hongguotv/core/PlaybackDeviceSession.kt": "eea73e6a45569a2cbbb9440f7cd5290c459b0b70",
+    "kotlin-tv/core/src/main/kotlin/com/hongguotv/core/RemoteVideo.kt": "eea73e6a45569a2cbbb9440f7cd5290c459b0b70",
+    "kotlin-tv/core/src/main/kotlin/com/hongguotv/core/RequestScope.kt": "eea73e6a45569a2cbbb9440f7cd5290c459b0b70",
+    "kotlin-tv/core/src/main/kotlin/com/hongguotv/core/Signer.kt": "eea73e6a45569a2cbbb9440f7cd5290c459b0b70"
+  },
+  "unresolved": {}
+}

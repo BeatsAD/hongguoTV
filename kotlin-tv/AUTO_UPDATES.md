@@ -1,6 +1,6 @@
 # 个人分发流水线与应用内更新
 
-更新渠道为 `BeatsAD/hongguoTV` 的 GitHub Releases。生产 Android 源码仍在 `kotlin-tv/`，上游仓库仅供参考。本流程不自动同步或合并上游，也不运行旧的整仓镜像导出脚本。
+更新渠道为 `BeatsAD/hongguoTV` 的 GitHub Releases。生产 Android 源码仍在 `kotlin-tv/`，上游仓库仅供参考。上游检测、逐文件同步和人工审核见 [上游修复流水线](UPSTREAM_SYNC.md)，不运行旧整仓镜像导出脚本。
 
 ## 包名、签名和升级连续性
 
@@ -13,12 +13,12 @@
 工作流：`.github/workflows/tv-release.yml`。
 
 1. 原生代码 PR、main 推送和手动触发运行 Python 发布约束测试，以及 `:core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug`。
-2. 只有本 fork 的 main、且验证成功，才进入持有签名 Secrets 的发布任务；PR 不签名、不发布。
+2. 只有本 fork 的 main、验证及保留定制检查成功、对应 PR 当前提交经所有者审核，并存在应用代码变化，才进入持有签名 Secrets 的发布任务；PR 不签名、不发布。
 3. 使用 JDK17、SDK36/build-tools36，执行 `:app:lintDistribution :app:assembleDistribution`。
 4. 发布脚本核对 APK 实际包名、版本、最低 API、非调试标记、安装权限和签名；生成 APK、对应原生源码 ZIP、update.json 与 SHA256SUMS。
 5. 先上传到草稿，逐个核对 GitHub 附件长度、摘要和上传状态，全部成功再公开并设置 latest。失败保留旧 latest，不重写已发布附件；旧构建重跑不取代较新版本。
 
-仅 `main` 的相关路径推送会自动发布；`workflow_dispatch` 可从 main 对同一源码分配一个新构建号，用于升级验收或重新发布可信源码。回退修复应使用更高构建号，不降低设备版本。
+`main` 的相关路径推送或明确 dispatch 会运行验证；只有已经审核的应用代码变化可以发布。`workflow_dispatch` 可从 main 对同一已审核源码分配一个新构建号；没有审核依据的旧提交不会因手动触发而绕过门禁。回退修复应使用更高构建号，不降低设备版本。
 
 版本：`versionCodeBase + GITHUB_RUN_NUMBER`，当前基线为 10000；versionName 为 `版本基线+运行编号-playbackfix`。例如第一轮为 `0.10.5+1-playbackfix / 10001`，标签 `kotlin-v0.10.5-build.10001`。更改工作流或版本基线时仍须维持构建号单调递增。
 

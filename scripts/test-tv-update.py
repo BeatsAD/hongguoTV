@@ -2,6 +2,9 @@ import importlib.util
 from pathlib import Path
 import tempfile
 import unittest
+import json
+import os
+from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location("tv_update", Path(__file__).with_name("tv-update.py"))
 update = importlib.util.module_from_spec(spec)
@@ -59,6 +62,25 @@ class ReleaseTests(unittest.TestCase):
     def test_unrelated_latest_is_not_overwritten(self):
         with self.assertRaises(AssertionError):
             update.promote(self.code, 'upstream-v99')
+
+    def test_missing_review_blocks_publication_before_upload(self):
+        root = Path(tempfile.mkdtemp(prefix='tv-review-test-'))
+        metadata = root / 'update.json'
+        sha = 'a' * 40
+        metadata.write_text(json.dumps({'sourceCommit':sha,'packageName':self.config['applicationId'],'certificateSha256':self.config['signerSha256']}))
+        with patch.dict(os.environ, {'GITHUB_REPOSITORY':self.config['repository'],'GITHUB_REF':'refs/heads/main'}), patch.object(update,'run',side_effect=[sha,'approved=false\npull_request=']) as run:
+            with self.assertRaisesRegex(AssertionError,'Human review'):
+                update.publish(metadata)
+            self.assertEqual(2,run.call_count)
+
+    def test_release_metadata_must_link_the_actual_approved_pr(self):
+        root = Path(tempfile.mkdtemp(prefix='tv-review-link-test-'))
+        metadata = root / 'update.json'
+        sha = 'a' * 40
+        metadata.write_text(json.dumps({'sourceCommit':sha,'packageName':self.config['applicationId'],'certificateSha256':self.config['signerSha256'],'reviewedPullRequest':'https://github.com/BeatsAD/hongguoTV/pull/99'}))
+        with patch.dict(os.environ, {'GITHUB_REPOSITORY':self.config['repository'],'GITHUB_REF':'refs/heads/main'}), patch.object(update,'run',side_effect=[sha,'approved=true\npull_request=7']):
+            with self.assertRaisesRegex(AssertionError,'provenance mismatch'):
+                update.publish(metadata)
 
     def test_asset_digest_size_and_upload_state_are_all_required(self):
         # Retain temporary evidence; no recursive deletion under workspace rules.
