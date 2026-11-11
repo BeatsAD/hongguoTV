@@ -1,0 +1,26 @@
+[
+  {
+    "now": 1800500000123,
+    "device": {
+      "device_id": "3100000000000000000",
+      "iid": "3200000000000000000",
+      "version_name": "7.1.3.32"
+    },
+    "url": "https://example.test/play?iid=3200000000000000000&device_id=3100000000000000000&ac=wifi&channel=update_64&aid=8662&app_name=novelread&version_code=71332&version_name=7.1.3.32&device_platform=android&os=android&ssmix=a&device_type=25053RT47C&device_brand=Redmi&language=zh&os_api=36&os_version=16&manifest_version_code=71332&resolution=1280*2772&dpi=520&update_version_code=71332&host_abi=arm64-v8a&dragon_device_type=phone&pv_player=71332&compliance_status=0&need_personal_recommend=1&player_so_load=1&is_android_pad_screen=0&video_id=123&ts=1800500000&_rticket=1800500000124",
+    "gorgon": "84041e3e4001845586fc5a52616530e4c40399a8f86ff28d1f5a",
+    "helios": "a1AO0vZvPpvar1Ifumwoygqs6Rp56lwnbw+FHVuEuGsbYgF0",
+    "medusa": "I3NRa9ebDpH3pI1Q9lmZG3e8MHPPbAABxBWi882jAfmMGEFXJEBSAW37RKQEhMxisXkcQunffzENiKy9Gy5+SddZfdbOd7NoPUzk7FekaXA1I57iVZLiX+m0+r++LLAOsAYCRtDPonZ1p3TP1+FW1SMTDD5Yeg/5DZRMrivDTjHkG2QCsskPH2+3xOhfLKovcmaYfS/KoP4tU1lY408kRMX6iR11a/84atPKuJcd56kqCckKjvzxbOyotW7fwjXEjo4xgNqgvjNGTV3TmqW4Zo6bg22xU4907+XgAntzp0W2XNelfNixe5QHtNBo4Y4JAjxntLl2ZdTPX0Nn3xlexZHob31pJ2P16YF0Jq0qONci5xAKjYssiCKRTa/oQeaibZsE3UI7Whco+/b7Ul/jI03XQf459YDAFetHbEai5SIdLJvvJJuKvRFVqAmX89wSJQZETsl39ktSQohJDr/KWzdxsoFq3JVWipsN65saYdWH98esH58Z61OgxuStpACwL0plMuciROL/nwWNOANpHmQERiXr3B62O5aJro7BRH07GlOFAHW6D8VSh24dl73cIfvQNB7TG2X6C/F1NiS3J3dtCmfVW/P1OjF/2FBXw/s/j+W2IR2pGdTmwy7kIx+CVU6v8Pk8aVrZgtOY1vAgA64t1koH2IqYENkXMG+9wbeS6BRvmNkh1O3qfUJ2U9+hCAbw5Iinvy7DL5U/ekSk5dYcxI5JvOta/lx3216bbZMTYhjxCbzNS52mwgKwgOc77yQhUcDtwsQTGzDiMJuuC48yzUGG9V8a6C7+Fe1tVmxu9gcv8XQYKQq+WGAre9ZviRsMkFeR0g6Xw6H451StZxYRv+2ZmJt8zoJHFNYpRcWrQqg0Pl44lw5GkfVOPkXmgxxJcl+AuilsxonoshT02oESms92rZl3zerbhR20ICi572V+f9PkASYs+Gh9QPcfSfIPToLcIngQOhsG4SLa6S9HkiygkZwyKzI2d18h8p3XW6f+P5P//j+SvzhV"
+  },
+  {
+    "now": 1800500001123,
+    "device": {
+      "device_id": "3100000000000000001",
+      "iid": "3200000000000000001",
+      "version_name": "7.3.9.32"
+    },
+    "url": "https://example.test/play?iid=3200000000000000001&device_id=3100000000000000001&ac=wifi&channel=update_64&aid=8662&app_name=novelread&version_code=71332&version_name=7.3.9.32&device_platform=android&os=android&ssmix=a&device_type=25053RT47C&device_brand=Redmi&language=zh&os_api=36&os_version=16&manifest_version_code=71332&resolution=1280*2772&dpi=520&update_version_code=71332&host_abi=arm64-v8a&dragon_device_type=phone&pv_player=71332&compliance_status=0&need_personal_recommend=1&player_so_load=1&is_android_pad_screen=0&video_id=123&ts=1800500001&_rticket=1800500001127",
+    "gorgon": "84041e3e40014dd533135a52616530e4c40399a8f86ff28d9fc1",
+    "helios": "a1AO0sodAn9TkkPSK9HCVLAEkoN56lwnbw+FHVuEuGsbYgF0",
+    "medusa": "InNRa9abDpH2pI1Q91mZG3a8MHPPbAABqBXi892jAdmMOFsJwrnLhcprPPWmQFoCJkVhkRyz8bjdpmy1OyM2HxWEkFKZRTV7Kd4FnS2uAz1l1kCl+Thjtb6EYXHhLL1/uNJs58O8DM/OqR+/eQhV9znMzfO10IXCxrSVYBR8FEtFLXfwEtZV7yja9Io8ZUeRZgT+hh71+Crbk826TfOWUVyNrWWEnunNfLhiq7qaZQXJyndmsdSqY8uaRTmFzwVR2JTqEicxVeQfURrJPxqQ4sJdeIyL+fbwKkwoK7oojMg7mP1MZcVQUOy7yEl4HGF44gLj2+wABlrxd7DhFuGY1kGo3bSpSmG+zOL3diwFejDduzX/zZ7EusuMfDt9EdPbk6WTs8bxkAf2HY/qcXfFCmZn7Ssj2McRUqKyGHCnpz+3XPZ0pe6mSZq9cFdd97ZdNU9+1tM/vvH/yaepLh7nkw7gaSjskUFFRkjfTmReisb0W73DfmHBC4w+e5PDgsegZCDLoYGMG4rTlnl3cy9T+1GKAZ1hEIaOYnQxCcuCHfA+p7k5S3vxV072W+Rlzr+l7Ow/Yj0YallKgg0ZsbyOdsaPUkv8Nnf+5tp07/RHn2lPnt0GrKG3BSo982jm+c/eZ7sS0kcnZy9w4jt/AXWjmuWMkB9n5hsiVGGWhEl4xUp5KPnA/pkJ1d1seZika7DiwZVXSIQr36mftK1VEXVUcxKIpBnV1zyZsWudW3wKx1FbYsA3h47awboVOjKpmD79MgwlmYKnUvYyJKhxVAvG2HlUZOpECPZsNLpu5frlDz6ngxf0H/guHLkoW85dOq5qiRsMkFeR0g6Xw6H451StZxYRv+2ZmJt8zoJHFNYpRcWrQqg0Pl44lw5GkfVOPkXmgxxJcl+AuilsxonoshT02oESms92rZl3zerbhR20ICi572V+f9PkASYs+Gh9QPcfSfIPToLcIngQOhsG4SLa6S9HkiygkZwyKzI2d18h8p3XW8P+P5P//j+SvzhV"
+  }
+]

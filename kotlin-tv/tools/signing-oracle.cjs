@@ -2,7 +2,27 @@
 const fs = require('fs'); const vm = require('vm'); const path = require('path');
 const source = fs.readFileSync(path.join(__dirname,'../../server/vendor/hongguo.cjs'),'utf8');
 const ctx = vm.createContext({require,Buffer,URL,URLSearchParams});
-vm.runInContext(source+`;globalThis.oracle = {branchOf,hashF13,xGorgon,helios,buildMedusa,sm3};`,ctx);
+vm.runInContext(source+`;globalThis.oracle = {branchOf,hashF13,xGorgon,helios,buildMedusa,sm3,device:DEVICE,pythonUrlEncode};`,ctx);
+if(process.argv.includes('--registered-device')) {
+ const rows=[];
+ for(let variant=0;variant<2;variant++) {
+  const now=1800500000123+variant*1000;const ts=Math.floor(now/1000);
+  const device={device_id:`310000000000000000${variant}`,iid:`320000000000000000${variant}`,version_name:variant?'7.3.9.32':'7.1.3.32'};
+  Object.assign(ctx.oracle.device,device);
+  vm.runInContext(`Date.now=()=>${now}; letSeed=17; Math.random=()=>{letSeed=(Math.imul(letSeed,1664525)+1013904223)>>>0;return letSeed/4294967296;};`,ctx);
+  const values={...ctx.oracle.device,video_id:'123'};
+  let url;for(let offset=0;offset<128;offset++) {
+   url=`https://example.test/play?${ctx.oracle.pythonUrlEncode({...values,ts:String(ts),_rticket:String(now+offset)})}`;
+   if(ctx.oracle.branchOf(url,null,ts)===0)break;
+  }
+  const random=vm.runInContext('Math.floor(Math.random()*65536)',ctx);
+  const gorgon=ctx.oracle.xGorgon(url.split('?')[1],null,ts,random);
+  const helios=ctx.oracle.helios(ts);const medusa=ctx.oracle.buildMedusa(url,null,ts);
+  rows.push({now,device,url,gorgon,helios,medusa});
+ }
+ fs.writeFileSync(path.join(__dirname,'../core/src/test/resources/signing-registered-device.json'),JSON.stringify(rows,null,2)+'\n');
+ process.exit(0);
+}
 const result=[];
 for(let variant=0;variant<12;variant++) {
  const ts=1800500000+variant;

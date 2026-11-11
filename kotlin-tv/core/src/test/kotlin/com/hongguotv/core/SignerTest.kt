@@ -3,6 +3,20 @@ import org.json.JSONArray
 import org.junit.Assert.*
 import org.junit.Test
 class SignerTest {
+    @Test fun requestAndEncryptedSignatureUseTheSameRegisteredDevice() {
+        val rows=JSONArray(javaClass.getResource("/signing-registered-device.json")!!.readText())
+        for(i in 0 until rows.length()) {
+            val row=rows.getJSONObject(i);val device=row.getJSONObject("device")
+            val values=VendorConstants.device+mapOf("device_id" to device.getString("device_id"),"iid" to device.getString("iid"),"version_name" to device.getString("version_name"),"video_id" to "123")
+            var seed=17L
+            val signer=Signer({row.getLong("now")}) { seed=(seed*1664525+1013904223) and 0xffffffffL;seed/4294967296.0 }
+            val signed=signer.sign("https://example.test/play",values)
+            assertEquals(row.getString("url"),signed.url)
+            assertEquals(row.getString("gorgon"),signed.headers["x-gorgon"])
+            assertEquals(row.getString("helios"),signed.headers["x-helios"])
+            assertEquals(row.getString("medusa"),signed.headers["x-medusa"])
+        }
+    }
     @Test fun matchesPinnedJavaScriptOracleAcrossTimestampVariants() {
         val rows = JSONArray(javaClass.getResource("/signing.json")!!.readText())
         for (i in 0 until rows.length()) {

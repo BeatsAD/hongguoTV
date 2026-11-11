@@ -30,8 +30,81 @@ class ContentRepositoryTest {
             assertNotEquals(requests[0].url.queryParameter(field),requests[2].url.queryParameter(field))
         }
         assertTrue(requests[0].url.queryParameter("iid")!!.matches(Regex("3[0-9]{18}")))
-        assertNull(requests[0].header("x-argus"))
-        assertTrue(requests[0].header("User-Agent")!!.contains("tt-ok/3.12.13.20"))
+        assertEquals("GET",requests[0].method)
+        assertEquals("/reading/bookapi/video_tab/multi_video_model/v1/",requests[0].url.encodedPath)
+        assertEquals("123",requests[0].url.queryParameter("video_id"))
+        assertNull(requests[0].body)
+        for(header in listOf("x-argus","x-gorgon","x-helios","x-medusa","x-khronos")) assertFalse(requests[0].header(header).isNullOrBlank())
+    }
+
+    @Test fun currentNestedModelsSupportObjectAndStringWithoutLosingQualityOrBackup() {
+        for(asString in listOf(false,true)) {
+            val entry=JSONObject(inlineModel(Triple(1080,"bytevc2","https://example.com/unsupported"),Triple(720,"h264","https://example.com/main")))
+                .getJSONObject("data").getJSONObject("123")
+            val model=entry.getJSONObject("video_model")
+            model.getJSONArray("video_list").getJSONObject(1).put("backup_url","https://other.example/backup")
+            if(asString) entry.put("video_model",model.toString())
+            val body=JSONObject().put("code",0).put("data",JSONObject().put("video_model_data",JSONObject().put("123",entry)))
+            var calls=0
+            val result=repository { calls++;body.toString() }.stream("123",720)
+            assertEquals("720P",result.quality);assertEquals("h264",result.codec)
+            assertEquals("https://example.com/main",result.url);assertEquals(listOf("https://other.example/backup"),result.backupUrls)
+            assertEquals(1,calls)
+        }
+    }
+
+    @Test fun emptyRegisteredRequestUsesOneCompatibilityRequestWithoutReplacingIdentity() {
+        var registrations=0
+        val session=PlaybackDeviceSession(register={ _,_->
+            registrations++;DeviceRegister.Registered("12345","67890",cookies=mapOf("ttreq" to "fixture-cookie"))
+        })
+        session.profile(OkHttpClient());val before=session.snapshot()
+        val requests=mutableListOf<Request>()
+        val reply: (Request)->String={ request ->
+            requests+=request
+            if(request.url.queryParameter("device_id")=="12345") "" else inlineModel(Triple(720,"h264","https://example.com/video"))
+        }
+        val repo=repository(session=session,respond=reply)
+        repo.stream("123");repo.stream("123");repository(session=session,respond=reply).stream("123")
+        assertEquals(4,requests.size)
+        assertEquals("12345",requests.first().url.queryParameter("device_id"))
+        assertEquals("ttreq=fixture-cookie",requests.first().header("Cookie"))
+        requests.drop(1).forEach {
+            assertEquals(VendorConstants.device["device_id"],it.url.queryParameter("device_id"))
+            assertNull(it.header("Cookie"));assertEquals("GET",it.method)
+        }
+        assertEquals(1,registrations);assertEquals(before,session.snapshot())
+        assertTrue(session.compatibilityPlayback)
+        assertFalse(Diagnostics.snapshot().contains("fixture-cookie"))
+    }
+
+    @Test fun emptyCompatibilityResultIsBoundedAndDoesNotLatchOrRotateTheDevice() {
+        var registrations=0
+        val session=PlaybackDeviceSession(register={ _,_->registrations++;DeviceRegister.Registered("12345","67890") })
+        val ids=mutableListOf<String?>()
+        val repo=repository(session=session) { ids+=it.url.queryParameter("device_id");"" }
+        assertThrows(EmptyContentException::class.java) { repo.stream("123") }
+        val saved=session.snapshot()
+        assertThrows(EmptyContentException::class.java) { repo.stream("123") }
+        assertEquals(listOf("12345",VendorConstants.device["device_id"],"12345",VendorConstants.device["device_id"]),ids)
+        assertEquals(1,registrations);assertEquals(saved,session.snapshot());assertFalse(session.compatibilityPlayback)
+    }
+
+    @Test fun accessRejectionAndRateLimitingNeverFallBackToAnotherIdentity() {
+        for(status in listOf(401,403,429)) {
+            var calls=0
+            val session=PlaybackDeviceSession(register={ _,_->DeviceRegister.Registered("12345","67890") })
+            val client=OkHttpClient.Builder().addInterceptor { chain ->
+                calls++
+                Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                    .code(status).message("Rejected").body("".toResponseBody()).build()
+            }.build()
+            val repo=ContentRepository(client,playbackSession=session)
+            assertThrows(IOException::class.java) { repo.stream("123") }
+            assertEquals(1,calls);assertFalse(session.compatibilityPlayback)
+            assertThrows(ContentRequestDeferredException::class.java) { repo.stream("123") }
+            assertEquals(1,calls)
+        }
     }
 
     @Test fun inlineModelSelectsCompatibleQualityWithoutLegacyRequest() {
@@ -66,6 +139,8 @@ class ContentRepositoryTest {
     @Test fun responseCannotSubstituteAnUnrequestedEpisode() {
         val response=inlineModel(Triple(720,"h264","https://example.com/other")).replace("\"123\"","\"456\"")
         assertEquals("播放信息没有对应剧集",assertThrows(IOException::class.java) { repository { response }.stream("123") }.message)
+        val nested=JSONObject().put("data",JSONObject().put("video_model_data",JSONObject(response).getJSONObject("data")))
+        assertEquals("播放信息没有对应剧集",assertThrows(IOException::class.java) { repository { nested.toString() }.stream("123") }.message)
     }
 
     @Test fun emptyAndRejectedModelsExplainUpstreamFailure() {
@@ -154,11 +229,11 @@ class ContentRepositoryTest {
         assertEquals("720P",repo.stream("123",720).quality)
     }
 
-    private fun repository(clock: () -> Long = System::currentTimeMillis, respond: (Request) -> String) = ContentRepository(
+    private fun repository(clock: () -> Long = System::currentTimeMillis,session: PlaybackDeviceSession?=null, respond: (Request) -> String) = ContentRepository(
         OkHttpClient.Builder().addInterceptor { chain ->
             Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
                 .code(200).message("OK").body(respond(chain.request()).toResponseBody()).build()
-        }.build(),clock,playbackSession=PlaybackDeviceSession(register={ _,_->
+        }.build(),clock,playbackSession=session ?: PlaybackDeviceSession(register={ _,_->
             DeviceRegister.Registered("3"+(1..18).joinToString("") { kotlin.random.Random.nextInt(10).toString() },"3"+(1..18).joinToString("") { kotlin.random.Random.nextInt(10).toString() })
         })
     )

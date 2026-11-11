@@ -28,7 +28,7 @@ data class StreamInfo(val url: String, val key: ByteArray?, val quality: String,
 class SearchSessionExpiredException: IOException("搜索结果已过期，请从第 1 页重新搜索")
 
 class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectTimeout(15,TimeUnit.SECONDS).readTimeout(30,TimeUnit.SECONDS).callTimeout(45,TimeUnit.SECONDS).build(), private val clock: () -> Long = System::currentTimeMillis, val requestGate: ContentRequestGate = ContentRequestGate(), val playbackSession: PlaybackDeviceSession = PlaybackDeviceSession.shared) {
-    private val signer = Signer()
+    private val signer = Signer(clock)
     private val site = "https://hongguoduanju.com"
     private enum class SearchSource { APP, WEBSITE }
     private data class SearchCursor(val searchId: String, val passback: String, val offset: Int?, val updatedAt: Long, val source: SearchSource = SearchSource.APP, val websitePage: Int = 0)
@@ -199,36 +199,42 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
         return Detail(card(o).copy(id=id,episodeCount=episodes.size),episodes)
     }
     fun stream(id: String, maxQuality: Int = 1080, supported: (StreamInfo)->Boolean = { true }): StreamInfo {
+        var compatibility=playbackSession.compatibilityPlayback
         repeat(2) { attempt ->
-            try { return streamOnce(id,maxQuality,supported) }
+            try {
+                return streamOnce(id,maxQuality,supported,compatibility).also {
+                    if(compatibility) playbackSession.compatibilityPlayback=true
+                }
+            }
             catch(failure: EmptyContentException) {
                 Diagnostics.failure("播放取址",failure)
                 if(attempt==1 || Thread.currentThread().isInterrupted) throw failure
-                Diagnostics.record("播放取址","空数据，仅重新取址一次")
+                Diagnostics.record("播放取址",if(compatibility) "空数据，仅重新取址一次" else "注册身份取址为空，仅尝试一次上游兼容请求；保留本机身份")
+                compatibility=true
             }
         }
         error("Unreachable")
     }
-    private fun streamOnce(id: String,maxQuality: Int,supported: (StreamInfo)->Boolean): StreamInfo {
+    private fun streamOnce(id: String,maxQuality: Int,supported: (StreamInfo)->Boolean,compatibility: Boolean): StreamInfo {
         requestGate.check("api5-normal-sinfonlineb.fqnovel.com")
         require(id.matches(Regex("[0-9]{1,30}")))
-        val payload="""{"biz_param":{"detail_page_version":0,"device_level":3,"disable_digg_stat":false,"need_all_video_definition":true,"need_mp4_align":false,"use_os_player":false,"use_server_dns":false,"video_platform":1024},"mixed_video_id_map":{"1004":["$id"]}}""".toByteArray()
-        // Adapted from tsukiyo-zero/hongguoTV 88c6238, GPL-3.0; see NOTICE.md.
-        val identity=playbackSession.profile(http)
-        val query=Signer.encode(identity.values + ("_rticket" to clock().toString()))
-        val playerUrl="https://api5-normal-sinfonlineb.fqnovel.com/novel/player/multi_video_model/v1/?$query"
-        val request=Signer.Request(playerUrl,mapOf(
-            "User-Agent" to "com.phoenix.read/71532 (Linux; U; Android 9; SM-N9860; Build/PQ3A.190705.10241111;tt-ok/3.12.13.20)",
-            "Accept" to "application/json; charset=utf-8,application/x-protobuf"
-        )+identity.cookie.takeIf(String::isNotBlank)?.let { mapOf("Cookie" to it) }.orEmpty(),payload)
-        val response=text(playerUrl,request,timeoutMillis=10_000,metadata=false)
+        // Current signed GET and nested model layout: N3urda/hongguoTV a2256e8, GPL-3.0.
+        // Keep each identity's query/signature/cookie together; never rotate registration on errors.
+        val identity=if(compatibility) PlaybackDeviceSession.Profile(VendorConstants.device,"") else playbackSession.profile(http)
+        val signed=signer.sign("https://api5-normal-sinfonlineb.fqnovel.com/reading/bookapi/video_tab/multi_video_model/v1/",identity.values+mapOf(
+            "video_id" to id,"video_id_type" to "0","device_level" to "1","need_all_video_definition" to "1",
+            "need_mp4_align" to "0","use_os_player" to "0","video_platform" to "1024","source" to "0","from_video_id" to ""
+        ))
+        val request=if(identity.cookie.isBlank()) signed else signed.copy(headers=signed.headers+("Cookie" to identity.cookie))
+        val response=text(request.url,request,timeoutMillis=10_000,metadata=false)
         if(response.isBlank()) throw EmptyContentException("播放接口返回空响应，请稍后重试或更新应用")
         val data=try { JSONObject(response) } catch(_: Exception) { throw PlaybackSourceException(PlaybackFailureKind.FORMAT,"播放信息格式已变化，请更新应用") }
         val code=data.optInt("Code",data.optInt("code",0))
         if(code!=0) throw PlaybackSourceException(PlaybackFailureKind.SOURCE,"播放接口暂不可用（错误码 $code）")
         val map=data.optJSONObject("data") ?: throw EmptyContentException("播放信息为空，请稍后重试")
         if(map.length()==0) throw EmptyContentException("播放信息为空，请稍后重试")
-        val entry=map.optJSONObject(id) ?: throw PlaybackSourceException(PlaybackFailureKind.FORMAT,"播放信息没有对应剧集")
+        val models=map.optJSONObject("video_model_data") ?: map
+        val entry=models.optJSONObject(id) ?: throw PlaybackSourceException(PlaybackFailureKind.FORMAT,"播放信息没有对应剧集")
         val model=entry.optJSONObject("video_model") ?: try { JSONObject(entry.str("video_model")) } catch(_: Exception) { throw PlaybackSourceException(PlaybackFailureKind.FORMAT,"播放信息格式已变化，请更新应用") }
         // Current models carry renditions directly; avoid a second legacy fallback request.
         val inline=model.optJSONArray("video_list")?.objects().orEmpty().mapNotNull { row ->

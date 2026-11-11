@@ -31,3 +31,8 @@ https://github.com/tsukiyo-zero/hongguoTV/blob/88c6238d4ee987f45eb134215e221df0b
 原实现声明派生于 charlie901208/HGTV 的 feat/phone-login 分支。本版保留协议字段，
 使用 SecureRandom、受限响应读取、独立匿名 Cookie、持久身份和失败冷却；不引入账号登录。
 https://github.com/tsukiyo-zero/hongguoTV/blob/main/kotlin-tv/core/src/main/kotlin/com/hongguotv/core/DeviceRegister.kt
+
+当前播放签名 GET 路径与嵌套视频模型结构参考 N3urda/hongguoTV（GPL-3.0-only），
+提交 `a2256e8538d22b6a15bad6b464aadefcdca37d72`：
+https://github.com/N3urda/hongguoTV/commit/a2256e8538d22b6a15bad6b464aadefcdca37d72
+本地增加独立注册身份优先、仅空响应触发的有界兼容回退，并将签名内设备字段与请求参数对齐。

@@ -20,6 +20,8 @@ class PlaybackDeviceSession(private val clock: ()->Long=System::currentTimeMilli
     private var cdid=UUID.randomUUID().toString()
     private var ready: Profile?=null
     private var retryAt=0L
+    // Playback-only routing hint. Never replaces the stored anonymous identity or cookies.
+    @Volatile internal var compatibilityPlayback=false
     var changed: ((String)->Unit)?=null
 
     @Synchronized internal fun profile(http: OkHttpClient): Profile {
