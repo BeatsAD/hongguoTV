@@ -103,6 +103,8 @@ components:
   settings-row:
     height: 60px
     typography: "{typography.control}"
+    value-text-align: right
+    value-end-inset: 36px
   switch:
     width: 44px
     height: 26px
@@ -220,7 +222,7 @@ components:
 | 主次动作 | 最小高44dp；主操作最小宽148dp，次操作104dp；左右内边距20dp／16dp |
 | 分组／筛选／辅助操作 | 最小高40dp，宽度按标签测量；分组最小宽72dp，辅助操作80dp |
 | 纯图标动作 | 最小44×44dp；主要图形20dp，辅助箭头16dp |
-| 设置行 | 最小60dp；图标20dp、文字16sp、值14sp；长文本可增长 |
+| 设置行 | 最小60dp；图标20dp、文字16sp、值14sp；当前值在箭头左侧右对齐，距行右缘36dp，与箭头间隔8dp；长文本可增长 |
 | 集数 | 最小高44dp、宽56dp；横纵间距10dp；正常十列、紧凑或大字体最多五列 |
 | 组内／区域间距 | 常规12dp／24dp；焦点外缘额外预留6dp |
 | 海报 | 2:3，CENTER_CROP；标题及真实进度在海报下，不拉伸图像 |
