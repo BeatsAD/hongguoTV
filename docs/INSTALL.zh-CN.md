@@ -29,7 +29,7 @@ adb -s DEVICE_SERIAL install -r /absolute/path/to/downloaded.apk
 
 更新会核对下载大小、SHA-256、实际包名、版本与签名。后台或播放中会取消更新请求；设置中可关闭自动检查与下载。下载失败时可稍后重试，不影响当前安装。不要通过卸载、清除数据或降级解决冲突。
 
-重要片单可先通过「设置 → 手机备份与恢复」导出备份。备份包含个人记录，请妥善保管，不要上传到公开 Issue。
+覆盖安装保留本机收藏和观看进度；当前版本已移除手机备份与恢复入口。
 
 ## 遥控器操作
 
@@ -64,7 +64,7 @@ adb -s DEVICE_SERIAL install -r /absolute/path/to/downloaded.apk
 | 搜索、分类或播放失败 | 记录错误原文，尝试其他剧或稍后重试；第三方接口变化可能需要新版 APK |
 | 有声音但黑屏、解码失败 | 尝试更低清晰度；仍失败时记录电视型号、系统版本与诊断信息 |
 | 手机无法连接 | 确认同一局域网，检查访客网络或设备隔离，重新生成二维码 |
-| 收藏或进度没有同步 | 当前记录在本机，不与 hongguo / 抖音账号同步；设备迁移使用备份与恢复 |
+| 收藏或进度没有同步 | 当前记录在本机，不与 hongguo / 抖音账号同步 |
 
 普通问题使用 [Bug 模板](https://github.com/BeatsAD/hongguoTV/issues/new?template=bug_report.yml)，附版本、设备、步骤及脱敏后的诊断信息。安全问题请使用[私密报告](https://github.com/BeatsAD/hongguoTV/security/advisories/new)。
 
