@@ -55,7 +55,7 @@ object TvStyle {
 /** Focus is drawn in the fixed hit region so hardware clipping cannot cut the ring. */
 internal class TvControlDrawable(context: Context,private val primary: Boolean=false,private val episode: Boolean=false,
     private val quiet: Boolean=false,private val outlineOnly: Boolean=false,private val fill: Int?=null,
-    private val forceFocus: Boolean=false,private val radius: Int=8): Drawable() {
+    private val forceFocus: Boolean=false,private val radius: Int=8,private val idleColor: Int?=null): Drawable() {
     private val unit=context.resources.displayMetrics.density
     private val paint=Paint(Paint.ANTI_ALIAS_FLAG)
     override fun isStateful()=true
@@ -67,7 +67,7 @@ internal class TvControlDrawable(context: Context,private val primary: Boolean=f
         val box=RectF(bounds);val r=radius*unit
         if(!outlineOnly) {
             paint.style=Paint.Style.FILL
-            paint.color=fill ?: when { !enabled->TvStyle.subtle;episode && selected->TvStyle.current;primary->TvStyle.primary;focused->TvStyle.raised;selected->TvStyle.selected;quiet->TvStyle.subtle;else->TvStyle.surface }
+            paint.color=fill ?: when { !enabled->TvStyle.subtle;episode && selected->TvStyle.current;primary->TvStyle.primary;focused->TvStyle.raised;selected->TvStyle.selected;else->idleColor ?: if(quiet) TvStyle.subtle else TvStyle.surface }
             paint.shader=if(primary && enabled) LinearGradient(box.left,box.top,box.right,box.top,TvStyle.primary,TvStyle.primaryEnd,Shader.TileMode.CLAMP) else null
             canvas.drawRoundRect(box,r,r,paint);paint.shader=null
             if(episode && selected) { paint.style=Paint.Style.STROKE;paint.strokeWidth=unit;paint.color=TvStyle.currentOutline;box.inset(unit/2,unit/2);canvas.drawRoundRect(box,r,r,paint);box.inset(-unit/2,-unit/2) }
