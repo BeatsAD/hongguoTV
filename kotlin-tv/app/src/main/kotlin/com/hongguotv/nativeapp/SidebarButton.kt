@@ -23,7 +23,7 @@ class SidebarButton(context: Context,value: String,kind: TvGlyph.Kind,selected: 
         fun paint() {
             setTextColor(if(isSelected) TvStyle.text else TvStyle.muted)
             setCompoundDrawables(TvGlyph(kind,filled=isSelected && kind==TvGlyph.Kind.HOME).apply { setBounds(0,0,dp(22),dp(22)) },null,null,null)
-            val base=TvControlDrawable(context,quiet=true)
+            val base=TvControlDrawable(context,idleColor=Color.TRANSPARENT)
             background=if(isSelected) LayerDrawable(arrayOf(base,TvStyle.shape(context,TvStyle.accent,radius=2))).apply {
                 setLayerGravity(1,Gravity.START or Gravity.CENTER_VERTICAL);setLayerSize(1,dp(3),dp(30))
             } else base
