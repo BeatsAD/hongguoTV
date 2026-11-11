@@ -3,6 +3,8 @@ package com.hongguotv.nativeapp
 
 /** Logical window units; kept independent of Android so width/font rules can be verified. */
 internal object BrowseLayout {
+    const val FAILURE_ACTION_GAP=12
+    const val FAILURE_CONTENT_GAP=24
     fun compact(width: Float)=width<800f
     fun sidebar(width: Float,font: Float)=if(compact(width)) 148f.coerceAtLeast(128f*font) else 165f.coerceAtLeast(128f*font)
     fun inset(width: Float)=if(compact(width)) 16f else 27f

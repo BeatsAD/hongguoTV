@@ -88,6 +88,8 @@ class MainActivity: Activity() {
     private var episodePanel: EpisodePanel?=null
     private val recovery=RecoveryBudget()
     private val bufferingWatchdog=BufferingWatchdog()
+    private var failureView: PlaybackFailureView?=null
+    private var retryAt=0L
     private var retryPending=false
     private var autoRecovery=false
     private var startPosition=0L
@@ -149,7 +151,7 @@ class MainActivity: Activity() {
             if(refreshedAt-lastFreshnessPoll>=30_000L) { lastFreshnessPoll=refreshedAt; refreshCurrentContent(allowNetwork=false) }
             if(screen==Screen.PLAYER) {
                 if(sleepTimer.poll()) stopForSleep()
-                if(hud.visibility==View.VISIBLE) updatePlaybackText()
+                if(playError) updateFailureStatus() else if(hud.visibility==View.VISIBLE) updatePlaybackText()
                 checkBuffering()
                 maybePrefetch()
                 val now=android.os.SystemClock.elapsedRealtime()
@@ -654,7 +656,7 @@ class MainActivity: Activity() {
                         }
                         playbackReady=true
                         if(firstReady) { firstReady=false; readySince=android.os.SystemClock.elapsedRealtime(); android.util.Log.i("HongguoTV","Playback ready episode=${episodeIndex+1} preloaded=${prefetched!=null} reused=$reuse elapsedMs=${readySince-playbackStarted}") }
-                        if(hud.visibility==View.VISIBLE) updatePlaybackText()
+                        if(playError) updateFailureStatus() else if(hud.visibility==View.VISIBLE) updatePlaybackText()
                     }
                     syncMediaSession()
                     if(state==Player.STATE_ENDED) {
@@ -732,18 +734,37 @@ class MainActivity: Activity() {
     private fun networkAvailable(): Boolean = connectivity.getNetworkCapabilities(connectivity.activeNetwork)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)==true
     private fun currentPosition(): Long = pendingSeek ?: player?.currentPosition?.takeIf { playbackReady } ?: startPosition
     private fun cancelRecovery() { main.removeCallbacks(retryRunnable); retryPending=false; autoRecovery=false }
+    private fun updateFailureStatus() {
+        if(!playError || failureView==null) return
+        val automatic=autoRecovery && recovery.remaining
+        val position="观看位置 ${formatTime(retryPosition)} 已保存"
+        val message=when {
+            automatic && !networkAvailable()->"网络已断开，联网后重试 · $position"
+            automatic && retryPending->{
+                val seconds=((retryAt-android.os.SystemClock.elapsedRealtime()).coerceAtLeast(0)+999)/1000
+                "${seconds}秒后重试（${recovery.attempts+1}/3） · $position"
+            }
+            automatic->"正在准备重试 · $position"
+            recovery.attempts>=3->"已重试3次，仍无法播放 · $position"
+            sleepStopped->"定时停止已生效 · $position"
+            else->"暂时无法播放 · $position"
+        }
+        val info=video?.info
+        failureView?.show(message,automatic,PlaybackFailureActions.canTry720(quality,
+            playbackAttempt.quality(library.maxQuality),info?.availableQualities.orEmpty()))
+    }
     private fun scheduleRecovery() {
         if(!foreground || !playError || !autoRecovery || retryPending) return
-        if(!recovery.remaining) { autoRecovery=false; playbackText.text=playbackFailureSummary+"\n已自动重试 3 次，仍无法播放。可手动重试或切换清晰度。"; return }
-        if(!networkAvailable()) { playbackText.text=playbackFailureSummary+"\n网络已断开，联网后自动续播 · 第 ${episodeIndex+1} 集 ${formatTime(retryPosition)}"; return }
+        if(!recovery.remaining) { autoRecovery=false;updateFailureStatus();return }
+        if(!networkAvailable()) { updateFailureStatus();return }
         val delay=recovery.delayMillis ?: return
-        playbackText.text=playbackFailureSummary+"\n${if(retryAutoplay) "准备恢复播放" else "准备恢复暂停位置"} · ${delay/1000f} 秒后重试 ${recovery.attempts+1}/3 · ${formatTime(retryPosition)}"
-        retryPending=true; main.postDelayed(retryRunnable,delay)
+        retryPending=true;retryAt=android.os.SystemClock.elapsedRealtime()+delay
+        updateFailureStatus();main.postDelayed(retryRunnable,delay)
     }
     private fun playerFailure(problem: Throwable) {
         retryPosition=currentPosition().coerceAtLeast(0); retryAutoplay=requestedAutoplay && !sleepStopped
         saveProgress(); cancelRecovery(); cancelPrefetch()
-        playError=true; player?.pause(); progressBar.visibility=View.GONE; hud.visibility=View.VISIBLE; playerHeading?.visibility=View.VISIBLE; controls.removeAllViews(); controls.visibility=View.VISIBLE; panel=true
+        playError=true; player?.pause(); progressBar.visibility=View.GONE; hud.visibility=View.GONE; playerHeading?.visibility=View.VISIBLE; controls.removeAllViews(); controls.visibility=View.GONE; panel=true
         val decoding=problem is PlaybackException && problem.errorCode in 4000..4999
         if(decoding && playbackAttempt.rejectDecoder(video?.info)) {
             playEpisode(episodeIndex,retryPosition,retryAutoplay,recovering=true)
@@ -755,16 +776,15 @@ class MainActivity: Activity() {
         if(problem is PlaybackException) Diagnostics.record("Media3 错误","code=${problem.errorCodeName} episode=${episodeIndex+1} quality=$quality")
         val upstreamMessage=source?.message
         playbackFailureSummary=if(decoding) "电视无法解码当前视频，可尝试更低清晰度。" else upstreamMessage ?: if(problem is PlaybackException && problem.errorCode in 3000..3999) "视频格式无法解析，请换一部剧或更新应用。" else Diagnostics.summary(problem)
-        playbackText.text=playbackFailureSummary
-        val actions=row(); controls.addView(actions)
-        addButton(actions,"立即重试") { playbackAttempt.clear(); playEpisode(episodeIndex,retryPosition,retryAutoplay) }.requestFocus()
-        addButton(actions,"本集尝试 720P") { playbackAttempt.clear(); playEpisode(episodeIndex,retryPosition,retryAutoplay,qualityOverride=720) }
-        addButton(actions,"返回选集") { returnToDetail(true) }
-        addButton(controls,"诊断详情") { cancelRecovery(); tvTools.diagnostics(null,"第 ${episodeIndex+1} 集 · $quality · 位置 ${formatTime(retryPosition)}\n${video?.stats().orEmpty()}") }
-        if(retryable && !sleepStopped) {
-            addButton(controls,"停止自动重试") { cancelRecovery(); playbackText.text=playbackFailureSummary+"\n自动重试已停止，观看位置已保留。" }
-            autoRecovery=true; scheduleRecovery()
-        }
+        failureView?.let { root.removeView(it) }
+        failureView=PlaybackFailureView(this,{
+            cancelRecovery();playbackAttempt.clear();playEpisode(episodeIndex,retryPosition,retryAutoplay)
+        },{
+            cancelRecovery();playbackAttempt.clear();playEpisode(episodeIndex,retryPosition,retryAutoplay,qualityOverride=720)
+        },{ cancelRecovery();returnToDetail(true) }).also { root.addView(it,FrameLayout.LayoutParams(-1,-1)) }
+        autoRecovery=retryable && !sleepStopped && recovery.remaining
+        updateFailureStatus()
+        if(autoRecovery) scheduleRecovery()
         android.util.Log.w("HongguoTV","Playback failure: ${problem.javaClass.simpleName}"+(if(problem is PlaybackException) " code=${problem.errorCodeName}" else upstreamMessage?.let { " $it" }.orEmpty()))
     }
     private fun hidePlaybackOverlay() {
@@ -773,6 +793,7 @@ class MainActivity: Activity() {
     }
     private fun showHud() {
         if(screen!=Screen.PLAYER) return
+        if(playError) { updateFailureStatus();return }
         hud.visibility=View.VISIBLE; playerHeading?.visibility=View.VISIBLE; updatePlaybackText(); main.removeCallbacks(hideHud)
         if(!panel && player?.isPlaying==true) main.postDelayed(hideHud,4500)
     }
@@ -794,7 +815,7 @@ class MainActivity: Activity() {
     private fun requestPlayback(play: Boolean) {
         requestedAutoplay=play; pausedForLifecycle=!play
         if(play) sleepStopped=false
-        if(!play) { player?.pause(); retryAutoplay=false; saveProgress() }
+        if(!play) { if(playError) cancelRecovery();player?.pause(); retryAutoplay=false; saveProgress() }
         else if(playError) { playEpisode(episodeIndex,retryPosition,true); return }
         else if(episodePanel==null) { if(player?.playbackState==Player.STATE_ENDED) player?.seekTo(0); player?.play() }
         if(!play) window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -831,6 +852,7 @@ class MainActivity: Activity() {
         cancelRecovery(); player?.pause(); saveProgress()
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         playbackText.text="定时停止已生效 · 观看位置已保存 · 按播放可继续"
+        if(playError) updateFailureStatus()
         showHud(); if(!playError && episodePanel==null) showPanel(); syncMediaSession()
         Toast.makeText(this,"定时停止已生效",Toast.LENGTH_LONG).show()
     }
@@ -959,6 +981,7 @@ class MainActivity: Activity() {
         library.save(WatchProgress(data.series,data.episodes[episodeIndex],episodeIndex,p.currentPosition.coerceAtLeast(0),p.duration.coerceAtLeast(0),completed || p.playbackState==Player.STATE_ENDED,System.currentTimeMillis()))
     }
     private fun releasePlayer() {
+        failureView?.let { root.removeView(it) };failureView=null
         cancelRecovery(); cancelPrefetch(); mediaSession.deactivate(); tvTools.close()
         val wasForeground=foreground; foreground=false
         val oldPanel=episodePanel; episodePanel=null; oldPanel?.dismiss(); foreground=wasForeground
@@ -990,6 +1013,13 @@ class MainActivity: Activity() {
             val key=event.keyCode
             if(panel && !playError && key==KeyEvent.KEYCODE_DPAD_DOWN) {
                 if(event.action==KeyEvent.ACTION_DOWN && event.repeatCount==0) showEpisodePanel(currentFocus ?: transportPlay ?: hud)
+                return true
+            }
+            if(playError && key==KeyEvent.KEYCODE_MENU) {
+                if(event.action==KeyEvent.ACTION_DOWN && event.repeatCount==0 && !tvTools.showing) {
+                    cancelRecovery();updateFailureStatus()
+                    tvTools.diagnostics(currentFocus,"第 ${episodeIndex+1} 集 · $quality · 位置 ${formatTime(retryPosition)}\n$playbackFailureSummary\n${video?.stats().orEmpty()}")
+                }
                 return true
             }
             if(key==KeyEvent.KEYCODE_BACK) { if(event.action==KeyEvent.ACTION_UP) goBack(); return true }
@@ -1031,7 +1061,7 @@ class MainActivity: Activity() {
         super.onConfigurationChanged(newConfig)
         if(!library.isLoaded) return
         when(screen) {
-            Screen.PLAYER -> { val position=currentPosition(); val autoplay=player?.playWhenReady==true && !pausedForLifecycle; playEpisode(episodeIndex,position,autoplay) }
+            Screen.PLAYER -> if(playError) updateFailureStatus() else { val position=currentPosition(); val autoplay=player?.playWhenReady==true && !pausedForLifecycle; playEpisode(episodeIndex,position,autoplay) }
             Screen.DETAIL -> if(detail!=null) showDetail(false)
             else -> showCatalog()
         }
@@ -1053,7 +1083,7 @@ class MainActivity: Activity() {
                 val waiting=deferredWork; deferredWork=null; waiting?.apply?.invoke()
             }
             if(screen==Screen.CATALOG && tab==3) favoriteMonitor.check()
-            if(screen==Screen.PLAYER) syncMediaSession()
+            if(screen==Screen.PLAYER) { if(playError) updateFailureStatus();syncMediaSession() }
             refreshCurrentContent()
         } else libraryLoadError?.let(::showLibraryError)
     }

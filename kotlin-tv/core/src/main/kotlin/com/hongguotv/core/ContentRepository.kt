@@ -22,7 +22,7 @@ data class RankPosition(val rank: Int?, val heat: String)
 data class ComicRanking(val positions: Map<String,RankPosition>, val totalPages: Int, val updatedText: String)
 data class CatalogPage(val items: List<Series>, val hasMore: Boolean, val ranking: ComicRanking? = null)
 data class StreamInfo(val url: String, val key: ByteArray?, val quality: String,
-    val codec: String="", val width: Int?=null, val height: Int?=null, val frameRate: Double?=null, val backupUrls: List<String> = emptyList()) {
+    val codec: String="", val width: Int?=null, val height: Int?=null, val frameRate: Double?=null, val backupUrls: List<String> = emptyList(), val availableQualities: Set<Int> = emptySet()) {
     val variantKey get()="${quality.substringBefore('（')}:$codec:${width}x$height"
 }
 class SearchSessionExpiredException: IOException("搜索结果已过期，请从第 1 页重新搜索")
@@ -284,7 +284,8 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
         val valid=rows.filter(supported).sortedWith(compareByDescending<StreamInfo> { qualityNumber(it.quality) }.thenByDescending { it.codec in setOf("h264","avc","avc1") })
         val selected=valid.firstOrNull { qualityNumber(it.quality)<=maxQuality } ?: valid.lastOrNull()?.let { lowest -> valid.first { qualityNumber(it.quality)==qualityNumber(lowest.quality) } }
             ?: throw PlaybackSourceException(PlaybackFailureKind.UNSUPPORTED,"没有电视可播放的清晰度，请稍后再试或选择其他剧集")
-        return if(qualityNumber(selected.quality)>maxQuality) selected.copy(quality=selected.quality+"（兼容资源）") else selected
+        return selected.copy(quality=selected.quality+(if(qualityNumber(selected.quality)>maxQuality) "（兼容资源）" else ""),
+            availableQualities=valid.map { qualityNumber(it.quality) }.filter { it>0 }.toSet())
     }
     companion object {
         fun extractRouter(html: String): JSONObject {

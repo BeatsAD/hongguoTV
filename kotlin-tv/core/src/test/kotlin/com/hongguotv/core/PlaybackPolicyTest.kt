@@ -6,6 +6,14 @@ import java.io.IOException
 import java.net.SocketTimeoutException
 
 class PlaybackPolicyTest {
+    @Test fun lowerQualityActionRequiresAnAvailableLowerRendition() {
+        assertTrue(PlaybackFailureActions.canTry720("1080P",1080,setOf(720,1080)))
+        assertFalse(PlaybackFailureActions.canTry720("720P",1080,setOf(720,1080)))
+        assertFalse(PlaybackFailureActions.canTry720("480P",1080,setOf(480,720)))
+        assertFalse(PlaybackFailureActions.canTry720("1080P",720,setOf(720,1080)))
+        assertFalse(PlaybackFailureActions.canTry720("1080P",1080,setOf(1080)))
+        assertFalse(PlaybackFailureActions.canTry720("",1080,emptySet()))
+    }
     @Test fun wrappingARejectedSourceDoesNotMakeItRetryable() {
         val source=PlaybackSourceException(PlaybackFailureKind.SOURCE,"播放接口暂不可用（错误码 110001）")
         val wrapper=IOException("wrapped",source)
