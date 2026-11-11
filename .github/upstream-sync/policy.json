@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "repository": "BeatsAD/hongguoTV",
+  "upstream": "N3urda/hongguoTV",
+  "branch": "main",
+  "reviewer": "BeatsAD",
+  "candidatePrefix": "codex/upstream-sync/",
+  "automaticPaths": [
+    "kotlin-tv/core/src/main/kotlin/com/hongguotv/core/Bytes.kt",
+    "kotlin-tv/core/src/main/kotlin/com/hongguotv/core/ContentRepository.kt",
+    "kotlin-tv/core/src/main/kotlin/com/hongguotv/core/DeviceRegister.kt",
+    "kotlin-tv/core/src/main/kotlin/com/hongguotv/core/MediaCrypto.kt",
+    "kotlin-tv/core/src/main/kotlin/com/hongguotv/core/PlaybackDeviceSession.kt",
+    "kotlin-tv/core/src/main/kotlin/com/hongguotv/core/RemoteVideo.kt",
+    "kotlin-tv/core/src/main/kotlin/com/hongguotv/core/RequestScope.kt",
+    "kotlin-tv/core/src/main/kotlin/com/hongguotv/core/Signer.kt"
+  ],
+  "requiredChecks": [
+    "TV verification",
+    "Upstream preservation"
+  ]
+}

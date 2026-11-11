@@ -73,11 +73,15 @@ def prepare(apk, run_number):
                 "sourceCommit": commit, "certificateSha256": config["signerSha256"],
                 "apk": {"name": destination.name, "size": destination.stat().st_size, "sha256": digest(destination)},
                 "notes": "个人分发版：保留本机片单、观看记录与设置；支持应用内检查、下载和系统确认覆盖更新。"}
+    reviewed_pr = os.environ["REVIEWED_PULL_REQUEST"]
+    assert reviewed_pr.isdigit(), "A reviewed PR is required"
+    manifest["reviewedPullRequest"] = f'https://github.com/{config["repository"]}/pull/{reviewed_pr}'
     metadata = out / "update.json"
     metadata.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
     source = out / f"hongguotv-{tag}-source.zip"
     paths = ["kotlin-tv", "LICENSE", "AGENTS.md", "scripts/tv-update.py", "scripts/test-tv-update.py",
-             ".github/workflows/tv-release.yml", "server/vendor/hongguo.cjs", "server/vendor/LICENSE.drpys"]
+             "scripts/upstream-sync.py", "scripts/test-upstream-sync.py", ".github/upstream-sync", ".github/CODEOWNERS",
+             ".github/workflows/tv-release.yml", ".github/workflows/upstream-sync.yml", "server/vendor/hongguo.cjs", "server/vendor/LICENSE.drpys"]
     tracked = run("git", "ls-tree", "-r", "--name-only", "HEAD", "--", *paths).splitlines()
     for path in tracked:
         assert not any(part in {"build", ".gradle", ".kotlin", "outputs"} for part in Path(path).parts)
@@ -118,6 +122,10 @@ def publish(metadata):
     assert manifest["sourceCommit"] == run("git", "rev-parse", "HEAD")
     assert manifest["packageName"] == config["applicationId"]
     assert manifest["certificateSha256"] == config["signerSha256"]
+    review = run("python3", "scripts/upstream-sync.py", "release-check", "--sha", manifest["sourceCommit"])
+    decision = dict(line.split("=", 1) for line in review.splitlines())
+    assert decision.get("approved") == "true", "Human review was not confirmed; no release"
+    assert manifest["reviewedPullRequest"] == f'https://github.com/{config["repository"]}/pull/{decision["pull_request"]}', "Release review provenance mismatch"
     tag = manifest["tag"]
     out = metadata.parent
     paths = [out / manifest["apk"]["name"], out / f"hongguotv-{tag}-source.zip", metadata, out / "SHA256SUMS"]

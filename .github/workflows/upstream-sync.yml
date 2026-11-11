@@ -1,0 +1,71 @@
+name: Detect and reconcile reviewed upstream fixes
+on:
+  schedule:
+    - cron: '23 */6 * * *'
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+    inputs:
+      source_branch:
+        description: '留空检测上游；或指定自己的 codex/开发分支，由机器人创建人工移植 PR'
+        required: false
+        default: ''
+  workflow_run:
+    workflows: ['Verify and publish personal TV update']
+    types: [completed]
+permissions:
+  contents: read
+concurrency:
+  group: upstream-sync-control
+  cancel-in-progress: false
+jobs:
+  detect:
+    if: github.repository == 'BeatsAD/hongguoTV' && (github.event_name == 'workflow_dispatch' || github.event.schedule == '23 */6 * * *')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Propose core changes without overwriting local UI or features
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_BRANCH: ${{ inputs.source_branch }}
+        run: |
+          if [ -n "$SOURCE_BRANCH" ]; then
+            python3 scripts/upstream-sync.py propose-local --branch "$SOURCE_BRANCH"
+          else
+            python3 scripts/upstream-sync.py detect
+          fi
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: upstream-detection-report
+          if-no-files-found: ignore
+          path: |
+            outputs/upstream-sync-*/report.json
+            outputs/upstream-sync-*/proposal.md
+  reconcile:
+    if: github.repository == 'BeatsAD/hongguoTV' && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+      checks: read
+      actions: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Merge only current human-approved candidates and dispatch release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/upstream-sync.py reconcile

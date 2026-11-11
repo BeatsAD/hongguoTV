@@ -2,9 +2,8 @@ name: Verify and publish personal TV update
 on:
   push:
     branches: [main]
-    paths: ['kotlin-tv/**', 'scripts/tv-update.py', 'scripts/test-tv-update.py', '.github/workflows/tv-release.yml']
+    paths: ['kotlin-tv/**', 'scripts/tv-update.py', 'scripts/test-tv-update.py', 'scripts/upstream-sync.py', 'scripts/test-upstream-sync.py', '.github/workflows/tv-release.yml', '.github/upstream-sync/**', '.github/CODEOWNERS']
   pull_request:
-    paths: ['kotlin-tv/**', 'scripts/tv-update.py', 'scripts/test-tv-update.py', '.github/workflows/tv-release.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -13,6 +12,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   verify:
+    name: TV verification
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -28,6 +28,7 @@ jobs:
           packages: platform-tools
       - run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
       - run: python3 scripts/test-tv-update.py
+      - run: python3 scripts/test-upstream-sync.py
       - run: ./kotlin-tv/gradlew -p kotlin-tv :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --console=plain
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
@@ -37,16 +38,57 @@ jobs:
             kotlin-tv/core/build/test-results/
             kotlin-tv/app/build/test-results/
             kotlin-tv/app/build/reports/lint-results-debug.*
-  release:
-    needs: verify
+  preservation:
+    name: Upstream preservation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Always execute policy from main, not from a proposed upstream patch.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify canonical three-way merge and protected files
+        env:
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref || github.ref_name }}
+        run: |
+          git fetch --no-tags origin "$CANDIDATE_SHA"
+          python3 scripts/upstream-sync.py verify --base origin/main --head "$CANDIDATE_SHA" --branch "$HEAD_BRANCH"
+  review_gate:
+    name: Reviewed release gate
     if: github.repository == 'BeatsAD/hongguoTV' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      approved: ${{ steps.review.outputs.approved }}
+      pull_request: ${{ steps.review.outputs.pull_request }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Require human review of exact PR head and an application change
+        id: review
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/upstream-sync.py release-check --sha "$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+  release:
+    needs: [verify, preservation, review_gate]
+    if: github.repository == 'BeatsAD/hongguoTV' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && needs.review_gate.outputs.approved == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
       contents: write
+      pull-requests: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
         with:
@@ -74,6 +116,8 @@ jobs:
         run: ./kotlin-tv/gradlew -p kotlin-tv :app:lintDistribution :app:assembleDistribution --console=plain
       - name: Verify APK identity and prepare immutable assets
         id: assets
+        env:
+          REVIEWED_PULL_REQUEST: ${{ needs.review_gate.outputs.pull_request }}
         run: |
           metadata=$(python3 scripts/tv-update.py prepare --apk kotlin-tv/app/build/outputs/apk/distribution/app-distribution.apk)
           echo "manifest=$metadata" >> "$GITHUB_OUTPUT"
