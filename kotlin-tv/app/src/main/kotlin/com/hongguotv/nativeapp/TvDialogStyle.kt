@@ -9,11 +9,17 @@ import android.widget.TextView
 /** Theme all app-owned alert controls, including stock adapter and numeric-keypad buttons. */
 object TvDialogStyle {
     fun diagnosticBodyHeight(context: android.content.Context)=(context.resources.displayMetrics.heightPixels*.55f).toInt()
+    private fun animation(context: android.content.Context)=if(!TvMotion.enabled()) 0 else if(TvMotion.spatial(context)) R.style.TvDialogMotion else R.style.TvFadeMotion
+    fun show(dialog: AlertDialog) {
+        dialog.window?.setWindowAnimations(animation(dialog.context))
+        dialog.show();apply(dialog)
+    }
     fun apply(dialog: AlertDialog) {
         val context=dialog.context;val metrics=context.resources.displayMetrics
         fun dp(n: Int)=(n*metrics.density).toInt()
         val width=minOf(metrics.widthPixels-dp(64),dp(460))
         dialog.window?.apply {
+            setWindowAnimations(animation(context))
             addFlags(android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN)
             setBackgroundDrawableResource(R.drawable.dialog_surface)
             setLayout(width,ViewGroup.LayoutParams.WRAP_CONTENT)

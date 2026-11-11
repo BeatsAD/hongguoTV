@@ -52,3 +52,11 @@ class BufferingWatchdog {
         return now-began >= if(hasPlayed) 12_000L else 18_000L
     }
 }
+
+/** Offer a real lower rendition only; unknown source capabilities never imply 720P support. */
+object PlaybackFailureActions {
+    fun canTry720(currentQuality: String,requestedQuality: Int,available: Set<Int>): Boolean {
+        val current=ContentRepository.qualityNumber(currentQuality).takeIf { it>0 } ?: requestedQuality
+        return current>720 && requestedQuality>720 && 720 in available
+    }
+}

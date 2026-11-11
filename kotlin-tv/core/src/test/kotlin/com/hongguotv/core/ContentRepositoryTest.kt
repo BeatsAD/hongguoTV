@@ -116,7 +116,7 @@ class ContentRepositoryTest {
             calls++
             inlineModel(Triple(1080,"bytevc2","https://example.com/unsupported"),Triple(1080,"h264","https://example.com/high"),Triple(480,"h264","https://example.com/low"))
         }
-        assertEquals(StreamInfo("https://example.com/low",null,"480P",codec="h264"),repo.stream("123",720))
+        assertEquals(StreamInfo("https://example.com/low",null,"480P",codec="h264",availableQualities=setOf(480,1080)),repo.stream("123",720))
         assertEquals(1,calls)
     }
     @Test fun inlineBackupIsKeptWithTheSameRendition() {
@@ -185,6 +185,7 @@ class ContentRepositoryTest {
         assertEquals("https://example.com/small",selected.url)
         assertEquals(720,selected.width); assertEquals(1280,selected.height); assertEquals(25.0,selected.frameRate!!,0.0)
         assertEquals(2,seen.size)
+        assertEquals(setOf(720),selected.availableQualities)
     }
 
     @Test fun allDeviceRejectedTiersStopWithoutNetworkRetries() {

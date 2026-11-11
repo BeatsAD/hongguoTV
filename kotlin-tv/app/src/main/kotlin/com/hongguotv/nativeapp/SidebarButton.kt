@@ -28,7 +28,7 @@ class SidebarButton(context: Context,value: String,kind: TvGlyph.Kind,selected: 
                 setLayerGravity(1,Gravity.START or Gravity.CENTER_VERTICAL);setLayerSize(1,dp(3),dp(30))
             } else base
         }
-        redraw={ paint() };paint();setOnFocusChangeListener { _,_-> paint() }
+        redraw={ paint() };paint()
         focusSelection=FocusSelection(this,RemoteFocus.NETWORK_DELAY,action,confirmSelected=true,exitKeys=setOf(android.view.KeyEvent.KEYCODE_DPAD_RIGHT))
         setOnClickListener { focusSelection.confirm() }
     }

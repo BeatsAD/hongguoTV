@@ -31,9 +31,27 @@ class PosterCardView(context: Context): LinearLayout(context) {
         poster.addView(count,FrameLayout.LayoutParams(-2,-2,Gravity.BOTTOM or Gravity.END).apply { setMargins(0,0,dp(5),dp(6)) })
         poster.addView(progress,FrameLayout.LayoutParams(-1,dp(3),Gravity.BOTTOM))
         addView(poster,LayoutParams(-1,dp(120)));addView(title,LayoutParams(-1,-2));addView(subtitle,LayoutParams(-1,-2))
-        setOnFocusChangeListener { _,focused -> poster.foreground=TvStyle.card(context,focused) }
+
+    }
+    override fun onFocusChanged(gainFocus: Boolean,direction: Int,previouslyFocusedRect: android.graphics.Rect?) {
+        super.onFocusChanged(gainFocus,direction,previouslyFocusedRect)
+        poster.foreground=TvStyle.card(context,gainFocus)
+        poster.animate().cancel()
+        val scale=if(gainFocus && TvMotion.spatial(context)) TvMotion.POSTER_SCALE else 1f
+        // Limit expansion to the existing six-dp clearance, even on very wide windows.
+        val safe=if(poster.height>0) minOf(scale,1f+dp(6).toFloat()/poster.height) else scale
+        if(TvMotion.enabled() && isAttachedToWindow) poster.animate().scaleX(safe).scaleY(safe)
+            .setDuration(if(gainFocus) TvMotion.FOCUS else 100L).setInterpolator(android.view.animation.DecelerateInterpolator()).start()
+        else { poster.scaleX=safe;poster.scaleY=safe }
+    }
+    override fun onDetachedFromWindow() {
+        poster.animate().cancel();poster.scaleX=1f;poster.scaleY=1f
+        super.onDetachedFromWindow()
     }
     fun bind(series: Series,caption: String="",fraction: Float?=null) {
+        poster.animate().cancel()
+        poster.scaleX=1f;poster.scaleY=1f
+        poster.foreground=TvStyle.card(context,hasFocus())
         title.text=series.title; subtitle.text=caption;subtitle.visibility=if(caption.isBlank()) GONE else VISIBLE
         count.text=series.episodeCount?.let { "全${it}集" }.orEmpty();count.visibility=if(count.text.isEmpty()) GONE else VISIBLE
         names=series.tagNames.distinct().filter(String::isNotBlank).take(3)
