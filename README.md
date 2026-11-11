@@ -58,9 +58,9 @@ U 盘安装、ADB 示例、备份恢复与常见问题见[中文安装与使用�
 
 ## 版本与更新
 
-当前开发基线已切换为 **1.0.0**，目标安装包为 **`hongguo-1.0.0.apk`**；以 Releases 实际公开状态为准。0.10.x 首次升级需手动覆盖安装一次，保留本机数据；后续继续在应用内更新。
+当前正式版为 **[hongguo 1.0.0](https://github.com/BeatsAD/hongguoTV/releases/tag/v1.0.0)**，安装包为 **[`hongguo-1.0.0.apk`](https://github.com/BeatsAD/hongguoTV/releases/download/v1.0.0/hongguo-1.0.0.apk)**。0.10.x 首次升级需手动覆盖安装一次，保留本机数据；后续继续在应用内更新。
 
-截至 **2026-11-11**，本仓库已发布个人分发版 **[0.10.5+3-playbackfix（构建 10003）](https://github.com/BeatsAD/hongguoTV/releases/tag/kotlin-v0.10.5-build.10003)**。最新版本始终以 [Releases](https://github.com/BeatsAD/hongguoTV/releases/latest) 为准。
+1.0.0 于 **2026-11-11** 正式发布；历史个人分发版 **[0.10.5（升级验证）](https://github.com/BeatsAD/hongguoTV/releases/tag/kotlin-v0.10.5-build.10003)** 保留下载。最新版本始终以 [Releases](https://github.com/BeatsAD/hongguoTV/releases/latest) 为准。
 
 - 本渠道保留当前播放取址兼容修复，并提供保持包名、签名与本机数据的在线更新。
 - 分发版仅在前台浏览时自动检查和下载；播放中或进入后台会取消更新请求。设置中可关闭自动检查和下载。

@@ -165,6 +165,13 @@ def get_release(repository, tag=None):
     if result.returncode == 0:
         return json.loads(result.stdout)
     assert "HTTP 404" in result.stderr, "Cannot read release state; refusing to publish"
+    if tag is not None:
+        # The tag endpoint only exposes published releases. Find drafts through
+        # the authenticated list endpoint before deciding to create or upload.
+        pages = json.loads(run("gh", "api", "--paginate", "--slurp", f"repos/{repository}/releases?per_page=100"))
+        matches = [release for page in pages for release in page if release["tag_name"] == tag]
+        assert len(matches) <= 1, "Ambiguous release tag; refusing to publish"
+        return matches[0] if matches else None
     return None
 
 

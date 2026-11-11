@@ -144,6 +144,32 @@ class ReleaseTests(unittest.TestCase):
         with patch.object(update, 'ROOT', root), patch.dict(os.environ, {'ANDROID_HOME': '/different/sdk'}):
             self.assertEqual(Path('/existing/sdk'), update.android_sdk())
 
+    def test_draft_is_found_when_published_tag_endpoint_returns_404(self):
+        import subprocess
+        draft = self.release(draft=True)
+        draft['assets'] = [{'name': 'hongguo-1.0.0.apk', 'state': 'uploaded'}]
+        with patch.object(update.subprocess, 'run', return_value=subprocess.CompletedProcess([], 1, '', 'gh: Not Found (HTTP 404)')), \
+             patch.object(update, 'run', return_value=json.dumps([[self.release(name='0.9.0')], [draft]])) as run:
+            self.assertEqual(draft, update.get_release(self.config['repository'], self.tag))
+            run.assert_called_once_with('gh', 'api', '--paginate', '--slurp', f"repos/{self.config['repository']}/releases?per_page=100")
+
+    def test_missing_or_ambiguous_draft_is_not_treated_as_existing_release(self):
+        import subprocess
+        with patch.object(update.subprocess, 'run', return_value=subprocess.CompletedProcess([], 1, '', 'gh: Not Found (HTTP 404)')):
+            with patch.object(update, 'run', return_value='[[]]'):
+                self.assertIsNone(update.get_release(self.config['repository'], self.tag))
+            with patch.object(update, 'run', return_value=json.dumps([[self.release(draft=True)] * 2])):
+                with self.assertRaisesRegex(AssertionError, 'Ambiguous'):
+                    update.get_release(self.config['repository'], self.tag)
+
+    def test_tag_lookup_permission_errors_never_fall_back_to_draft_lookup(self):
+        import subprocess
+        with patch.object(update.subprocess, 'run', return_value=subprocess.CompletedProcess([], 1, '', 'gh: Forbidden (HTTP 403)')), \
+             patch.object(update, 'run') as run:
+            with self.assertRaises(AssertionError):
+                update.get_release(self.config['repository'], self.tag)
+            run.assert_not_called()
+
     def test_asset_digest_size_and_upload_state_are_all_required(self):
         path = Path(tempfile.mkdtemp(prefix='tv-release-test-')) / 'test.apk'
         path.write_bytes(b'signed-package')
