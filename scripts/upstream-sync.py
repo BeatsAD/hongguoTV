@@ -222,6 +222,30 @@ def ensure_verification(config, branch, sha):
     return False
 
 
+def activate_candidate_checks(repo, config, pr):
+    """Start native PR checks only for a recomputed, unchanged bot proposal.
+
+    Workflow approval permits CI to run; it never approves the proposed code.
+    Dispatch checks alone are deliberately insufficient for branch protection.
+    """
+    if pr.get("draft") or pr.get("user", {}).get("login") != "github-actions[bot]" or (pr["head"].get("repo") or {}).get("full_name") != config["repository"] or not pr["head"]["ref"].startswith(config["candidatePrefix"]):
+        return False
+    sha = pr["head"]["sha"]
+    runs = api(f'repos/{config["repository"]}/actions/workflows/tv-release.yml/runs?head_sha={sha}&per_page=100')["workflow_runs"]
+    pending = [run for run in runs if run["head_sha"] == sha and run["head_branch"] == pr["head"]["ref"] and run["event"] == "pull_request" and run.get("conclusion") == "action_required" and run.get("path") == ".github/workflows/tv-release.yml" and run.get("head_repository", {}).get("full_name") == config["repository"] and any(item["number"] == pr["number"] for item in run.get("pull_requests", []))]
+    if not pending:
+        return False
+    repo.git("fetch", "origin", "main")
+    base = repo.git("rev-parse", "FETCH_HEAD")
+    repo.git("fetch", "origin", sha)
+    fetch_upstream(repo, config)
+    verify_candidate(repo, config, base, sha, pr["head"]["ref"])
+    for run in pending:
+        api(f'repos/{config["repository"]}/actions/runs/{run["id"]}/approve', "POST")
+        print(f'PR #{pr["number"]}: activated native CI run {run["id"]}; human code review is still required.')
+    return True
+
+
 def propose_local(config, branch):
     """Let a single repository owner review a bot-authored manual migration PR."""
     assert_repository(config)
@@ -336,6 +360,7 @@ def reconcile(repo, config):
         if item["draft"] or (item["head"].get("repo") or {}).get("full_name") != config["repository"] or not item["head"]["ref"].startswith(config["candidatePrefix"]):
             continue
         pr = api(f'repos/{config["repository"]}/pulls/{item["number"]}')
+        activate_candidate_checks(repo, config, pr)
         reviews = all_reviews(config["repository"], pr["number"])
         if not approved(reviews, pr["head"]["sha"], config["reviewer"]):
             print(f'PR #{pr["number"]}: waiting for human approval of current SHA.')

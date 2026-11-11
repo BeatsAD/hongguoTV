@@ -29,7 +29,9 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: main
+          # Branch dispatch is an explicit owner action, useful for controller validation.
+          # workflow_run always uses trusted main, never the triggering candidate SHA.
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.ref || 'refs/heads/main' }}
           fetch-depth: 0
           persist-credentials: false
       - name: Propose core changes without overwriting local UI or features
@@ -51,7 +53,7 @@ jobs:
             outputs/upstream-sync-*/report.json
             outputs/upstream-sync-*/proposal.md
   reconcile:
-    if: github.repository == 'BeatsAD/hongguoTV' && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
+    if: github.repository == 'BeatsAD/hongguoTV'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -62,7 +64,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: main
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.ref || 'refs/heads/main' }}
           fetch-depth: 0
           persist-credentials: false
       - name: Merge only current human-approved candidates and dispatch release
