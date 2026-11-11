@@ -11,11 +11,12 @@ import java.security.MessageDigest
 
 class AppUpdatesTest {
     private val bytes = "signed-apk-test-bytes".toByteArray()
-    private fun json() = JSONObject().put("schema", 1).put("packageName", "com.hongguotv.nativeapp")
+    private fun json() = JSONObject().put("schema", 1).put("packageName", "com.hongguotv.nativeapp.playbackfix")
         .put("versionCode", 10001).put("versionName", "0.9.0+1").put("minSdk", 26).put("tag", "kotlin-v0.9.0-build.1")
         .put("apk", JSONObject().put("name", "hongguotv-kotlin-0.9.0-build.1-android8.apk").put("size", bytes.size)
             .put("sha256", MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }))
-    private fun update() = AppUpdate.parse(json().toString())
+    private fun parse(value: String) = AppUpdate.parse(value,"com.hongguotv.nativeapp.playbackfix","BeatsAD/hongguoTV")
+    private fun update() = parse(json().toString())
     private fun withFile(block: (File) -> Unit) {
         val dir = Files.createTempDirectory("update-test").toFile()
         // Retain this test's temporary directory; workspace policy forbids recursive cleanup.
@@ -26,25 +27,36 @@ class AppUpdatesTest {
         assertTrue(update.newerThan(9, 26)); assertFalse(update.newerThan(10001, 36)); assertFalse(update.newerThan(10002, 36)); assertFalse(update.newerThan(9, 25))
     }
     @Test fun downloadUrlUsesOnlyFixedRepositoryAndValidatedNames() {
-        assertEquals("https://github.com/N3urda/hongguoTV-updates/releases/download/kotlin-v0.9.0-build.1/hongguotv-kotlin-0.9.0-build.1-android8.apk", update().downloadUrl)
+        assertEquals("https://github.com/BeatsAD/hongguoTV/releases/download/kotlin-v0.9.0-build.1/hongguotv-kotlin-0.9.0-build.1-android8.apk", update().downloadUrl)
         for (value in listOf("../../bad.apk", "evil.apk", "https://example.com/evil.apk", "hongguotv-kotlin-1/2-android8.apk")) {
             val o = json(); o.getJSONObject("apk").put("name", value)
-            assertThrows(IllegalArgumentException::class.java) { AppUpdate.parse(o.toString()) }
+            assertThrows(IllegalArgumentException::class.java) { parse(o.toString()) }
         }
-        assertThrows(IllegalArgumentException::class.java) { AppUpdate.parse(json().put("tag", "../../other").toString()) }
+        assertThrows(IllegalArgumentException::class.java) { parse(json().put("tag", "../../other").toString()) }
     }
     @Test fun rejectOtherPackageAndInvalidSchema() {
-        assertThrows(IllegalArgumentException::class.java) { AppUpdate.parse(json().put("packageName", "other.app").toString()) }
-        assertThrows(IllegalArgumentException::class.java) { AppUpdate.parse(json().put("schema", 2).toString()) }
+        assertThrows(IllegalArgumentException::class.java) { parse(json().put("packageName", "other.app").toString()) }
+        assertThrows(IllegalArgumentException::class.java) { parse(json().put("schema", 2).toString()) }
+    }
+    @Test fun channelComesFromBuildConfigurationInsteadOfUntrustedManifest() {
+        val o=json().put("repository","attacker/updates").put("downloadUrl","https://example.com/other.apk")
+        assertTrue(parse(o.toString()).downloadUrl.startsWith("https://github.com/BeatsAD/hongguoTV/releases/download/"))
+        assertThrows(IllegalArgumentException::class.java) { parse(json().put("packageName","com.hongguotv.nativeapp").toString()) }
+        assertTrue(AppUpdate.parse(json().toString(),"com.hongguotv.nativeapp.playbackfix","example/personal-tv").downloadUrl.startsWith("https://github.com/example/personal-tv/"))
+    }
+    @Test fun rejectsInvalidRepositoriesBeforeNetworking() {
+        for(repository in listOf("../other","owner/../other","https://github.com/owner/repo","owner/repo?token=x","owner/repo#main","owner/repo%2fmore","owner/repo/extra")) {
+            assertThrows(IllegalArgumentException::class.java) { AppUpdateRepository(repository,"com.hongguotv.nativeapp.playbackfix") }
+        }
     }
     @Test fun enforceVersionSizeAndChecksumBounds() {
-        for (code in listOf(0L, -1L, Int.MAX_VALUE.toLong()+1)) assertThrows(IllegalArgumentException::class.java) { AppUpdate.parse(json().put("versionCode", code).toString()) }
+        for (code in listOf(0L, -1L, Int.MAX_VALUE.toLong()+1)) assertThrows(IllegalArgumentException::class.java) { parse(json().put("versionCode", code).toString()) }
         for (size in listOf(0L, -1L, AppUpdate.MAX_APK_BYTES+1)) {
             val o = json(); o.getJSONObject("apk").put("size", size)
-            assertThrows(IllegalArgumentException::class.java) { AppUpdate.parse(o.toString()) }
+            assertThrows(IllegalArgumentException::class.java) { parse(o.toString()) }
         }
         val o = json(); o.getJSONObject("apk").put("sha256", "invalid")
-        assertThrows(IllegalArgumentException::class.java) { AppUpdate.parse(o.toString()) }
+        assertThrows(IllegalArgumentException::class.java) { parse(o.toString()) }
     }
     @Test fun verifiedDownloadAtomicallyReplacesOldFile() = withFile { file ->
         file.writeText("previous"); val progress = mutableListOf<Int>()

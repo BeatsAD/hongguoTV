@@ -2,7 +2,10 @@ import java.util.Properties
 
 plugins { id("com.android.application"); kotlin("android") }
 val signingProperties = Properties().apply { val config = rootProject.file("keystore.properties"); if (config.exists()) config.inputStream().use { load(it) } }
+val updateChannel = Properties().apply { rootProject.file("distribution/channel.properties").inputStream().use { load(it) } }
 fun signingValue(env: String, key: String): String? = System.getenv(env) ?: signingProperties.getProperty(key)
+require(updateChannel.getProperty("applicationId") == "com.hongguotv.nativeapp.playbackfix")
+require(updateChannel.getProperty("repository").matches(Regex("[A-Za-z0-9][A-Za-z0-9_.-]{0,99}/[A-Za-z0-9][A-Za-z0-9_.-]{0,99}")))
 
 android {
     namespace = "com.hongguotv.nativeapp"
@@ -13,6 +16,8 @@ android {
         targetSdk = 36
         versionCode = System.getenv("HONGGUOTV_VERSION_CODE")?.toInt() ?: 50
         versionName = System.getenv("HONGGUOTV_VERSION_NAME") ?: "0.10.4"
+        buildConfigField("boolean", "ONLINE_UPDATES", "false")
+        buildConfigField("String", "UPDATE_REPOSITORY", "\"${updateChannel.getProperty("repository")}\"")
     }
     buildFeatures { buildConfig = true }
     signingConfigs {
@@ -26,6 +31,13 @@ android {
     buildTypes {
         getByName("debug") { applicationIdSuffix = ".playbackfix"; versionNameSuffix = "-playbackfix" }
         getByName("release") { signingConfig = signingConfigs.getByName("delivery"); isMinifyEnabled = true; proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro") }
+        create("distribution") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".playbackfix"
+            versionNameSuffix = "-playbackfix"
+            buildConfigField("boolean", "ONLINE_UPDATES", "true")
+            matchingFallbacks += listOf("release")
+        }
     }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17; isCoreLibraryDesugaringEnabled = true }
     kotlinOptions { jvmTarget = "17" }

@@ -20,6 +20,7 @@ import androidx.core.content.FileProvider
 import com.hongguotv.core.AppUpdate
 import com.hongguotv.core.AppUpdateRepository
 import com.hongguotv.core.UpdateFiles
+import com.hongguotv.core.Diagnostics
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.Executors
@@ -27,10 +28,10 @@ import java.util.concurrent.Future
 
 /** Foreground-only updater: no background service, and no networking or prompts during playback. */
 class AppUpdater(private val activity: Activity, private val idle: () -> Boolean) {
-    private val enabled=!BuildConfig.DEBUG && BuildConfig.APPLICATION_ID=="com.hongguotv.nativeapp"
+    private val enabled=BuildConfig.ONLINE_UPDATES
     private val main = Handler(Looper.getMainLooper())
     private val worker = Executors.newSingleThreadExecutor()
-    private val repository = AppUpdateRepository()
+    private val repository = AppUpdateRepository(BuildConfig.UPDATE_REPOSITORY,BuildConfig.APPLICATION_ID)
     private val preferences = activity.getSharedPreferences("app_updates", Activity.MODE_PRIVATE)
     private val apk = File(activity.cacheDir, "updates/update.apk")
     private var task: Future<*>? = null
@@ -97,7 +98,7 @@ class AppUpdater(private val activity: Activity, private val idle: () -> Boolean
     fun show(from: View?) {
         if(!enabled) {
             dialog?.dismiss()
-            dialog=AlertDialog.Builder(activity).setTitle("应用版本").setMessage("当前版本 ${BuildConfig.VERSION_NAME}\n开发测试版通过本地安装更新，不连接上游自动更新渠道。")
+            dialog=AlertDialog.Builder(activity).setTitle("应用版本").setMessage("当前版本 ${BuildConfig.VERSION_NAME}\n当前构建通过本地安装更新。")
                 .setPositiveButton("关闭",null).create().apply { setOnDismissListener { dialog=null; if(from?.isAttachedToWindow==true) from.requestFocus() }; show(); TvDialogStyle.apply(this) }
             return
         }
@@ -154,6 +155,7 @@ class AppUpdater(private val activity: Activity, private val idle: () -> Boolean
         preferences.edit().putLong("last_attempt", System.currentTimeMillis()).apply()
         updateStatus("正在检查新版…")
         work({ repository.latest() }) { update ->
+            Diagnostics.record("应用更新","检查成功 versionCode=${update.versionCode}")
             available = update.takeIf { it.newerThan(BuildConfig.VERSION_CODE.toLong(), Build.VERSION.SDK_INT) }; ready = false
             if (available == null) {
                 updateStatus(if (update.versionCode > BuildConfig.VERSION_CODE && update.minSdk > Build.VERSION.SDK_INT) "新版需要 Android API ${update.minSdk}，当前电视继续使用本版" else "已是最新版本 ${BuildConfig.VERSION_NAME}")
@@ -173,6 +175,7 @@ class AppUpdater(private val activity: Activity, private val idle: () -> Boolean
             repository.download(update, apk) { percent -> main.post { if (generation == ticket && active) updateStatus("正在下载 ${update.versionName} · $percent%") } }
             validateApk(update)
         }) {
+            Diagnostics.record("应用更新","下载及签名校验成功 versionCode=${update.versionCode} bytes=${update.size}")
             ready = true; updateStatus("${update.versionName} 已下载并校验\n${update.notes}\n\n确认后由系统覆盖安装，保留本机记录。")
             if (idle() && dialog == null && (manual || !deferred(update))) { promptedCode = update.versionCode; show(activity.currentFocus) }
         }
@@ -200,6 +203,7 @@ class AppUpdater(private val activity: Activity, private val idle: () -> Boolean
                     permissionRequested = true
                     activity.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${activity.packageName}")))
                 } else {
+                    Diagnostics.record("应用更新","打开系统覆盖安装 versionCode=${update.versionCode}")
                     val uri = FileProvider.getUriForFile(activity, "${activity.packageName}.updates", apk)
                     activity.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive")
                         .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION).apply { clipData = ClipData.newRawUri("更新安装包", uri) })

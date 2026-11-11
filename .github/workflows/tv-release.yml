@@ -1,0 +1,91 @@
+name: Verify and publish personal TV update
+on:
+  push:
+    branches: [main]
+    paths: ['kotlin-tv/**', 'scripts/tv-update.py', 'scripts/test-tv-update.py', '.github/workflows/tv-release.yml']
+  pull_request:
+    paths: ['kotlin-tv/**', 'scripts/tv-update.py', 'scripts/test-tv-update.py', '.github/workflows/tv-release.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: personal-tv-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407
+      - run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+      - run: python3 scripts/test-tv-update.py
+      - run: ./kotlin-tv/gradlew -p kotlin-tv :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --console=plain
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: native-verification
+          path: |
+            kotlin-tv/core/build/test-results/
+            kotlin-tv/app/build/test-results/
+            kotlin-tv/app/build/reports/lint-results-debug.*
+  release:
+    needs: verify
+    if: github.repository == 'BeatsAD/hongguoTV' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407
+      - run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+      - name: Restore existing personal signing identity and assign build number
+        env:
+          KEYSTORE_B64: ${{ secrets.HONGGUOTV_KEYSTORE_B64 }}
+        run: |
+          set -euo pipefail
+          test -n "$KEYSTORE_B64"
+          umask 077
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/hongguotv-update.jks"
+          echo "HONGGUOTV_KEYSTORE=$RUNNER_TEMP/hongguotv-update.jks" >> "$GITHUB_ENV"
+          python3 scripts/tv-update.py version >> "$GITHUB_ENV"
+      - name: Signed distribution build
+        env:
+          HONGGUOTV_STORE_PASSWORD: ${{ secrets.HONGGUOTV_STORE_PASSWORD }}
+          HONGGUOTV_KEY_ALIAS: ${{ secrets.HONGGUOTV_KEY_ALIAS }}
+          HONGGUOTV_KEY_PASSWORD: ${{ secrets.HONGGUOTV_KEY_PASSWORD }}
+        run: ./kotlin-tv/gradlew -p kotlin-tv :app:lintDistribution :app:assembleDistribution --console=plain
+      - name: Verify APK identity and prepare immutable assets
+        id: assets
+        run: |
+          metadata=$(python3 scripts/tv-update.py prepare --apk kotlin-tv/app/build/outputs/apk/distribution/app-distribution.apk)
+          echo "manifest=$metadata" >> "$GITHUB_OUTPUT"
+      - name: Publish verified assets then promote latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPDATE_MANIFEST: ${{ steps.assets.outputs.manifest }}
+        run: python3 scripts/tv-update.py publish --manifest "$UPDATE_MANIFEST"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: distribution-verification
+          path: |
+            kotlin-tv/app/build/reports/lint-results-distribution.*
+            outputs/releases/**/update.json
+            outputs/releases/**/SHA256SUMS
+      - name: Remove this job's temporary signing file
+        if: always()
+        run: rm -f "$RUNNER_TEMP/hongguotv-update.jks"

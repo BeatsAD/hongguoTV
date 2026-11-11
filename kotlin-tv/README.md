@@ -3,13 +3,20 @@
 这是独立的 **Kotlin + Android 原生 View + Media3** 工程，最低 Android 8.0 / API 26。安装一个 APK，联网后可直接浏览和播放，无需部署 Node、Docker 或填写服务器地址。
 
 - 应用名称：红果 TV 原生版
-- 包名：`com.hongguotv.nativeapp`，与旧版 `com.hongguotv` 可以并存。
+- 个人分发包名：`com.hongguotv.nativeapp.playbackfix`，沿用当前测试设备数据。历史正式包 `com.hongguotv.nativeapp` 与旧 `com.hongguotv` 独立。
 - 收藏和历史独立保存在本机，不自动迁移旧版数据。
 - APK 不含 JNI 库，可由 Android 在 ARM32、ARM64、x86、x86_64 上运行；视频解码能力依赖设备。
-- 源码分支：`codex/kotlin-standalone`。
-- [下载正式签名 APK](https://github.com/N3urda/hongguoTV-updates/releases/latest)
+- 个人分发源码分支：本 fork 的 `main`。
+- [下载个人分发 APK](https://github.com/BeatsAD/hongguoTV/releases/latest)；沿用现有个人签名，不是上游正式签名包。
 
 0.2.1 修复简介与设置切换后的焦点跳转，并适配放大字号的卡片高度。可直接覆盖安装 0.2.0，保留收藏和观看记录；见 [交付与验证记录](DELIVERY.md)。
+
+## 个人分发版 0.10.5
+
+- 增加保持现有包名、签名和数据的非调试 `distribution` 构建，接入本 fork 的公开更新渠道。
+- GitHub Actions 自动测试、签名构建并发布 APK、对应源码、update.json 与校验和；先验证草稿附件，再设置 latest。原生源码发布不执行旧的批量镜像删除脚本。
+- 在线下载核对文件和已安装应用的签名，系统确认覆盖安装；播放和后台取消更新请求。首次从开发版手动覆盖安装一次后，后续无需传 APK。
+- 配置和复现步骤见 [个人更新流水线](AUTO_UPDATES.md)。自动构建不等于模拟器或实体电视验收。
 
 ## 本地开发版 0.10.4
 
@@ -65,11 +72,11 @@
 
 ## 0.9.0 新增
 
-- 应用内更新：浏览时自动检查、下载公开发布仓库中的新版，校验文件和签名后由系统确认安装；设置中可手动检查或关闭自动下载。播放与后台会取消更新请求。
-- 推送 `codex/kotlin-standalone` 的原生代码后，自动导出对应原生源码到公开仓库，由 CI 验证、签名并发布 APK、源码及更新元数据。电视无需 GitHub 凭据。
+- 应用内更新：浏览时自动检查、下载本 fork 公开发布渠道中的新版，校验文件和签名后由系统确认安装；设置中可手动检查或关闭自动下载。播放与后台会取消更新请求。
+- 本 fork 的 main 原生代码更新后，由独立工作流验证、签名并发布 APK、源码及更新元数据。电视无需 GitHub 凭据。
 - 首次仍需手动安装这版；Android 8 首次需开启本应用的安装权限，之后每次确认系统安装。覆盖安装保留本机记录。
 
-[自动更新、发布配置与版本规则](AUTO_UPDATES.md)。云端构建编号从 10001 起递增，正式包沿用旧发布签名。
+[自动更新、发布配置与版本规则](AUTO_UPDATES.md)。个人渠道云端构建编号从 10001 起递增，沿用当前设备的个人签名。
 
 ## 0.8.0 新增
 
@@ -162,7 +169,7 @@
 adb install -r kotlin-tv/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-本地 Debug 包使用独立包名 `com.hongguotv.nativeapp.playbackfix`，设置中仅显示应用版本；不检查或下载上游正式更新，也不请求安装其他应用的权限。Debug 包由本地重新构建安装更新。
+本地 Debug 包使用 `com.hongguotv.nativeapp.playbackfix`，不检查或下载在线更新，也不请求安装其他应用的权限。`distribution` 使用同一包名和已核对的签名，关闭调试、支持个人渠道在线更新；首次覆盖安装须保留数据。
 
 正式 APK 使用独立发布密钥，**私钥和口令不在 GitHub 中**。重建发布包时，配置以下环境变量，或创建被 Git 忽略的 `kotlin-tv/keystore.properties`：
 

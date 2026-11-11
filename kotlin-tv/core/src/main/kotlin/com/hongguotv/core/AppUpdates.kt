@@ -12,19 +12,23 @@ import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 
 data class AppUpdate(val versionCode: Long, val versionName: String, val minSdk: Int,
-                     val tag: String, val fileName: String, val size: Long, val sha256: String, val notes: String) {
+                     val tag: String, val fileName: String, val size: Long, val sha256: String, val notes: String,
+                     val repository: String) {
     fun newerThan(installed: Long, sdk: Int) = versionCode > installed && minSdk <= sdk
-    val downloadUrl get() = "$RELEASES/download/$tag/$fileName"
+    val downloadUrl get() = "https://github.com/$repository/releases/download/$tag/$fileName"
     companion object {
-        const val REPOSITORY = "N3urda/hongguoTV-updates"
-        const val RELEASES = "https://github.com/$REPOSITORY/releases"
         const val MAX_APK_BYTES = 80L * 1024 * 1024
-        fun parse(json: String): AppUpdate {
+        fun validateRepository(repository: String): String {
+            require(repository.matches(Regex("[A-Za-z0-9][A-Za-z0-9_.-]{0,99}/[A-Za-z0-9][A-Za-z0-9_.-]{0,99}"))) { "更新仓库不匹配" }
+            return repository
+        }
+        fun parse(json: String, expectedPackage: String, repository: String): AppUpdate {
+            validateRepository(repository)
             val o = JSONObject(json)
-            require(o.getInt("schema") == 1 && o.getString("packageName") == "com.hongguotv.nativeapp") { "更新信息不匹配" }
+            require(o.getInt("schema") == 1 && o.getString("packageName") == expectedPackage) { "更新信息不匹配" }
             val apk = o.getJSONObject("apk")
             val update = AppUpdate(o.getLong("versionCode"), o.getString("versionName"), o.getInt("minSdk"),
-                o.getString("tag"), apk.getString("name"), apk.getLong("size"), apk.getString("sha256").lowercase(), o.optString("notes").take(1500))
+                o.getString("tag"), apk.getString("name"), apk.getLong("size"), apk.getString("sha256").lowercase(), o.optString("notes").take(1500),repository)
             require(update.versionCode in 1..Int.MAX_VALUE.toLong() && update.minSdk in 26..100)
             require(update.versionName.matches(Regex("[0-9][0-9A-Za-z.+-]{0,63}")))
             require(update.tag.matches(Regex("kotlin-v[0-9][0-9A-Za-z.+-]{0,80}")))
@@ -66,7 +70,9 @@ object UpdateFiles {
     }
 }
 
-class AppUpdateRepository : java.io.Closeable {
+class AppUpdateRepository(repository: String, private val packageName: String) : java.io.Closeable {
+    private val repository = AppUpdate.validateRepository(repository)
+    private val releases = "https://github.com/${this.repository}/releases"
     private val http = OkHttpClient.Builder().connectTimeout(10, TimeUnit.SECONDS).readTimeout(20, TimeUnit.SECONDS)
         .callTimeout(5, TimeUnit.MINUTES).addNetworkInterceptor { chain ->
             val url = chain.request().url
@@ -78,7 +84,7 @@ class AppUpdateRepository : java.io.Closeable {
     private fun request(url: String) = Request.Builder().url(url).header("User-Agent", "HongguoTV-Updater")
         .header("Cache-Control", "no-cache").build()
     fun latest(): AppUpdate {
-        val call = http.newCall(request("${AppUpdate.RELEASES}/latest/download/update.json"))
+        val call = http.newCall(request("$releases/latest/download/update.json"))
         call.timeout().timeout(25, TimeUnit.SECONDS)
         return call.execute().use { response ->
             if (!response.isSuccessful) throw IOException(if (response.code == 404) "尚无可用的自动更新版本" else "无法检查更新，请稍后重试")
@@ -87,7 +93,7 @@ class AppUpdateRepository : java.io.Closeable {
                 while (true) { val n = input.read(buffer); if (n < 0) break; if (out.size() + n > 65536) throw IOException("更新信息过大"); out.write(buffer, 0, n) }
                 out.toByteArray()
             } ?: throw IOException("更新信息为空")
-            try { AppUpdate.parse(bytes.toString(Charsets.UTF_8)) } catch (_: Exception) { throw IOException("更新信息格式不正确") }
+            try { AppUpdate.parse(bytes.toString(Charsets.UTF_8),packageName,repository) } catch (_: Exception) { throw IOException("更新信息格式不正确") }
         }
     }
     fun download(update: AppUpdate, file: File, progress: (Int) -> Unit) {

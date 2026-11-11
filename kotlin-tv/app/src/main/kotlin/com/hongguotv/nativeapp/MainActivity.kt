@@ -388,11 +388,11 @@ class MainActivity: Activity() {
         device.addView(text("收藏与观看进度保存在本机。",12f,muted).apply { setPadding(dp(14),dp(12),0,dp(25)) })
         heading(about,"关于")
         lateinit var updates: TextView
-        updates=setting(about,"${if(BuildConfig.DEBUG) "应用版本" else "版本与更新"}  ${BuildConfig.VERSION_NAME}") { updater.show(updates) }
+        updates=setting(about,"${if(BuildConfig.ONLINE_UPDATES) "版本与更新" else "应用版本"}  ${BuildConfig.VERSION_NAME}") { updater.show(updates) }
         lateinit var diagnostics: TextView
         diagnostics=setting(about,"诊断信息") { tvTools.diagnostics(diagnostics) }
         lateinit var license: TextView
-        license=setting(about,"开源许可") { tvTools.info("开源许可","本原生版以 GPL-3.0 发布。\n内容协议与加密处理移植自 drpys（22261ad）。\nAndroidX Media3 / OkHttp：Apache-2.0\nKotlin：Apache-2.0\nBouncy Castle：MIT\n完整源码和许可证见 GitHub：N3urda/hongguoTV-updates。",license) }
+        license=setting(about,"开源许可") { tvTools.info("开源许可","本原生版以 GPL-3.0 发布。\n内容协议与加密处理移植自 drpys（22261ad）。\nAndroidX Media3 / OkHttp：Apache-2.0\nKotlin：Apache-2.0\nBouncy Castle：MIT\n完整源码和许可证见 GitHub：${BuildConfig.UPDATE_REPOSITORY}。",license) }
         val items=listOf(qualityButton,defaultSpeed,frame,autoNextButton,backup,hidden,updates,diagnostics,license)
         items.forEachIndexed { index,view ->
             view.nextFocusUpId=items.getOrNull(index-1)?.id ?: nav[tab].id
@@ -403,7 +403,7 @@ class MainActivity: Activity() {
             if(key==KeyEvent.KEYCODE_DPAD_UP && event.action==KeyEvent.ACTION_DOWN) { nav[tab].requestFocus();true } else false
         }
         nav.forEach { it.nextFocusDownId=qualityButton.id }
-        about.addView(text(if(BuildConfig.DEBUG) "开发测试版通过本地安装更新。" else "确认系统安装后更新，保留本机记录。",12f,muted).apply { setPadding(dp(14),dp(12),0,0) })
+        about.addView(text(if(BuildConfig.ONLINE_UPDATES) "确认系统安装后更新，保留本机记录。" else "当前构建通过本地安装更新。",12f,muted).apply { setPadding(dp(14),dp(12),0,0) })
         nav[tab].requestFocus()
     }
 

@@ -1,42 +1,53 @@
-# GitHub 自动发布与电视应用内更新
+# 个人分发流水线与应用内更新
 
-公开渠道：`N3urda/hongguoTV-updates`。原开发仓库仍为私有。首次需要手动把带更新功能的正式 APK 安装到电视，此后不用逐次传文件。
+更新渠道为 `BeatsAD/hongguoTV` 的 GitHub Releases。生产 Android 源码仍在 `kotlin-tv/`，上游仓库仅供参考。本流程不自动同步或合并上游，也不运行旧的整仓镜像导出脚本。
 
-## 电视上的行为
+## 包名、签名和升级连续性
 
-- 前台浏览时每 6 小时检查一次最新正式版；首次进入应用延迟 8 秒，避免抢首屏。播放或离开前台会取消更新请求，返回浏览页后可继续下载。
-- 默认自动检查并下载，设置 → 版本与更新可以关闭，也可以手动检查。下载失败保留当前应用；部分文件清理，自动下载重试至少间隔 30 分钟。
-- 下载完显示版本信息，选择「安装新版」。第一次需允许本应用安装未知来源应用，之后调用系统安装确认。普通 Android 8 没有静默安装权限，仍须确认。
-- 选择「稍后」推迟该版本提醒一天；不会中断正在播放的视频。同版本、旧版本和要求更高 Android 版本的安装包不会自动安装。
-- APK 写入应用私有缓存，仅临时授权系统安装程序读取。下载使用 HTTPS、文件长度和 SHA-256 校验，并验证 APK 实际包名、版本号、最低 SDK 和当前安装应用的签名；不在 APK 中保存 GitHub 令牌。
+`distribution` 构建沿用当前已安装应用的 `com.hongguotv.nativeapp.playbackfix` 包名及个人开发签名，以便覆盖升级保留片单、进度、播放身份和设置；分发构建关闭调试、启用 R8 和在线更新。它不是上游正式签名发行版。签名公钥指纹、仓库、版本基线和最低 API 统一记录于 `distribution/channel.properties`。
 
-## 从推送到发布
+`debug` 构建保留本地调试及更新隔离；旧 `release` 构建不加入本个人渠道。首次从不带在线更新的版本升级，须核对设备、用户、原包签名及版本后手动覆盖安装一次；随后通过应用内更新。更换包名或签名需要另行设计迁移，不能卸载或降级绕过。
 
-1. 向私有仓库 `codex/kotlin-standalone` 推送原生客户端改动。
-2. `kotlin-public-sync.yml` 导出 HEAD 中跟踪的原生工程、构建文件及许可证到公开仓库 main。不会复制私有 Git 历史、未跟踪文件、构建目录或本地签名材料。
-3. 公开仓库 `release.yml` 执行 JVM 测试、Release lint 和正式签名构建。
-4. 构建成功后，先创建草稿、上传 APK、源码 ZIP、`update.json` 与 `SHA256SUMS`，确认 GitHub 附件摘要一致，再正式发布并设为 latest。构建失败不替换旧版。
-5. 电视通过公开 Release 的 `latest/download/update.json` 获取新版本，无需 GitHub 登录。
+## GitHub Actions
 
-同步只对原生代码、构建和同步流程相关路径触发；不因旧 React Native 服务或无关研究资料的提交发布 APK。旧的验证 workflow 继续保留。
+工作流：`.github/workflows/tv-release.yml`。
 
-## 签名与同步配置
+1. 原生代码 PR、main 推送和手动触发运行 Python 发布约束测试，以及 `:core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug`。
+2. 只有本 fork 的 main、且验证成功，才进入持有签名 Secrets 的发布任务；PR 不签名、不发布。
+3. 使用 JDK17、SDK36/build-tools36，执行 `:app:lintDistribution :app:assembleDistribution`。
+4. 发布脚本核对 APK 实际包名、版本、最低 API、非调试标记、安装权限和签名；生成 APK、对应原生源码 ZIP、update.json 与 SHA256SUMS。
+5. 先上传到草稿，逐个核对 GitHub 附件长度、摘要和上传状态，全部成功再公开并设置 latest。失败保留旧 latest，不重写已发布附件；旧构建重跑不取代较新版本。
 
-配置动作需仓库所有者授权。公开仓库的 Actions Secrets：
+仅 `main` 的相关路径推送会自动发布；`workflow_dispatch` 可从 main 对同一源码分配一个新构建号，用于升级验收或重新发布可信源码。回退修复应使用更高构建号，不降低设备版本。
 
-- `HONGGUOTV_KEYSTORE_B64`：与旧正式版相同的 keystore 的 Base64 编码。
-- `HONGGUOTV_STORE_PASSWORD`、`HONGGUOTV_KEY_ALIAS`、`HONGGUOTV_KEY_PASSWORD`：原签名配置。
+版本：`versionCodeBase + GITHUB_RUN_NUMBER`，当前基线为 10000；versionName 为 `版本基线+运行编号-playbackfix`。例如第一轮为 `0.10.5+1-playbackfix / 10001`，标签 `kotlin-v0.10.5-build.10001`。更改工作流或版本基线时仍须维持构建号单调递增。
 
-私有仓库的 `TV_UPDATES_DEPLOY_KEY` 是独立 SSH 私钥，对应公钥只授予公开更新仓库写入权限。签名私钥只在运行签名构建的临时目录中恢复，任务结束删除；源码和 APK 均不包含这些凭据。
+## 首次配置
 
-完成授权及凭据配置后，将私有仓库 Actions variable `TV_UPDATES_ENABLED` 设为 `true`，下一次相关推送即启用同步。在未启用时，同步任务跳过，常规构建验证照常执行。
+仓库启用 Actions；在 Settings → Secrets and variables → Actions 配置：
 
-不要改成在 APK 中嵌入 PAT，也不要向公开仓库同步私有 Git 历史。撤销自动发布时可禁用同步工作流并删除该部署密钥；签名 Secrets 可以单独撤销。
+- HONGGUOTV_KEYSTORE_B64：现有签名 keystore 的 Base64 内容。
+- HONGGUOTV_STORE_PASSWORD、HONGGUOTV_KEY_ALIAS、HONGGUOTV_KEY_PASSWORD：对应配置。
 
-## 版本规则与本地构建
+密钥仅进入发布任务临时单文件和 GitHub Secrets；不写入源码、日志、APK、源码 ZIP 或测试附件。当前渠道签名已用于现有设备，不能以新生成密钥替换。仓库 GITHUB_TOKEN 只在发布任务申请 contents:write，用于本仓库 Release，无需把 GitHub 凭据放进电视。
 
-云端 `versionCode = 10000 + release workflow run_number`，显示版本为 `0.9.0+run_number`。同一次已发布构建的重跑不覆盖原 APK；旧构建重跑也不能取代更新的 latest。保留此工作流的递增编号，后续调整版本显示名称时仍维持 versionCode 单调递增。
+## 电视更新行为
 
-本地未传环境变量时生成 0.9.0 / versionCode 9，供首次验证。复现云端源码时，应从该 Release 的 `update.json` 读取版本，传入 `HONGGUOTV_VERSION_CODE` 和 `HONGGUOTV_VERSION_NAME`；本地低版本号的 APK 无法覆盖较高云端版本。正式分发以云端签名包为准。
+应用前台浏览时每 6 小时检查一次，首次延迟 8 秒；播放及进入后台取消更新请求。设置 → 版本与更新可手动检查或关闭自动检查和下载。
 
-电视系统没有安装器、禁止未知来源或无法访问 GitHub 时，自动更新不能完成；旧版仍可继续使用。最低 API 26 不等于 Android 8 实体电视已验收。
+元数据固定从本渠道 latest/download/update.json 获取；文件名和标签严格校验，清单内任意仓库或 URL 不影响下载目标。下载允许 GitHub HTTPS 及其附件 CDN 跳转，核对长度和 SHA-256；安装前再次核对实际包名、版本、最低 API 和当前安装签名。
+
+下载后须在应用选择安装，并由系统确认；首次需要允许安装未知来源应用。普通电视没有静默安装权限。下载失败不影响当前安装，不允许通过清除数据或卸载解决升级冲突。
+
+## 本地复现
+
+安装 JDK17、Android SDK36/build-tools36；设置签名环境变量和 Release 清单中的精确版本：
+
+```sh
+HONGGUOTV_VERSION_CODE=10001 HONGGUOTV_VERSION_NAME=0.10.5+1 ./kotlin-tv/gradlew -p kotlin-tv :app:lintDistribution :app:assembleDistribution
+python3 scripts/test-tv-update.py
+```
+
+签名路径及密码使用环境变量或被忽略的 keystore.properties 配置，勿提交私钥。原生源码压缩包包含 Gradle 包装器、许可证、第三方声明、构建说明及签名参考源码；不导出整个本地 Git 历史、设备数据或 outputs。
+
+自动构建、公开附件、模拟器在线覆盖升级和实体电视验收是不同证据层。流水线成功不等于所有影片可播，当前接口兼容回退仍可能受上游变化影响。实体电视安装须另获授权。
