@@ -62,6 +62,10 @@ internal object RegisteredPlayer {
     private fun resolveUrl(raw: String,seed: String): String? {
         if(raw.isBlank()) return null
         fun valid(value: String)=cleanUrl(value).toHttpUrlOrNull()?.takeIf { it.username.isEmpty() && it.password.isEmpty() }?.toString()
-        return valid(raw) ?: valid(if(seed.isNotBlank()) MediaCrypto.decryptUrl(raw,decode64(seed)) else String(decode64(raw),Charsets.UTF_8))
+        valid(raw)?.let { return it }
+        // Some current models include key_seed but their URLs are ordinary Base64, not Spade.
+        val decoded=decode64(raw)
+        valid(String(decoded,Charsets.UTF_8))?.let { return it }
+        return if(seed.isNotBlank()) valid(MediaCrypto.decryptUrl(raw,decode64(seed))) else null
     }
 }

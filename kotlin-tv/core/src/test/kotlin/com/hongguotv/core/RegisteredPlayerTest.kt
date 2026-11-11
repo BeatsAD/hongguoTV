@@ -10,7 +10,7 @@ class RegisteredPlayerTest {
             .put("v720",JSONObject().put("main_url","https://example.com/main".toByteArray().base64())
                 .put("backup_url_1","https://example.com/backup".toByteArray().base64())
                 .put("vwidth",720).put("vheight",1280).put("codec_type","h264").put("encrypt",false))
-        val model=JSONObject().put("video_list",rows)
+        val model=JSONObject().put("video_list",rows).put("key_seed",ByteArray(32).base64())
         val response=JSONObject().put("code",0).put("data",JSONObject().put("video_model",model.toString()))
         val normalized=JSONObject(RegisteredPlayer.normalize(response.toString(),"123"))
             .getJSONObject("data").getJSONObject("123").getJSONObject("video_model").getJSONArray("video_list")
