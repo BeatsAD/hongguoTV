@@ -296,7 +296,7 @@ class NativeBrowseController(private val activity: Activity,private val reposito
             val result=runCatching { PhoneSearchServer(selectedAddress,{ query ->
                 val scope=phoneScope;val version=scopeRevision
                 main.post { if(active && route=="search" && ticket==phoneEpoch && version==scopeRevision) { beginScopedSearch(query,scope);searchView?.renderScopes() } }
-            },{ main.post { if(ticket==phoneEpoch) { closePhone();searchView?.session(null);searchView?.connection("二维码已过期，请刷新") } } },onConnected={ main.post { if(active && ticket==phoneEpoch) searchView?.connection("手机页面已打开 · 可连续发送") } }) }
+            },{ main.post { if(ticket==phoneEpoch) { closePhone();searchView?.session(null);searchView?.connection("二维码已过期，请刷新") } } },onConnected={ main.post { if(active && ticket==phoneEpoch) searchView?.connection("已连接，可继续输入") } }) }
             main.post {
                 if(closed || !active || route!="search" || ticket!=phoneEpoch) { result.getOrNull()?.close();return@post }
                 result.onSuccess { phone=it;expiresAt=android.os.SystemClock.elapsedRealtime()+900_000;searchView?.session(it.url);main.removeCallbacks(countdown);main.post(countdown) }

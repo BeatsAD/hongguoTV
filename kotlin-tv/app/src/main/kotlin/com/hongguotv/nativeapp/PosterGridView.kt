@@ -15,6 +15,8 @@ class PosterGridView(context: Context,private val columns: Int,private val sideb
     private val open: (Series)->Unit,private val actions: (Series,View)->Unit,private val append: ()->Unit): RecyclerView(context) {
     data class Item(val series: Series,val caption: String="",val fraction: Float?=null)
     data class Anchor(val id: String="",val position: Int=0,val offset: Int=0,val focus: Boolean=false)
+    internal var compactSearch=false
+    var leftTarget: View=sidebar
     var topTarget: View?=null
     var bottomTarget: View?=null
         set(value) {
@@ -47,7 +49,7 @@ class PosterGridView(context: Context,private val columns: Int,private val sideb
                 if(event.action!=KeyEvent.ACTION_DOWN) return@setOnKeyListener false
                 val index=holder.bindingAdapterPosition;if(index !in rows.indices) return@setOnKeyListener false
                 when(key) {
-                    KeyEvent.KEYCODE_DPAD_LEFT -> { if(index%columns==0) sidebar.requestFocus() else move(index-1);true }
+                    KeyEvent.KEYCODE_DPAD_LEFT -> { if(index%columns==0) leftTarget.requestFocus() else move(index-1);true }
                     KeyEvent.KEYCODE_DPAD_RIGHT -> { move(TvGridFocus.right(index,rows.size,columns));true }
                     KeyEvent.KEYCODE_DPAD_DOWN -> { val next=TvGridFocus.down(index,rows.size,columns);if(next!=null) move(next) else if(bottomTarget?.isShown==true && bottomTarget?.isFocusable==true) bottomTarget?.requestFocus() else { pendingDown=index;append() };true }
                     KeyEvent.KEYCODE_DPAD_UP -> { if(index>=columns) { move(index-columns);true } else topTarget?.let { it.requestFocus();true } ?: false }
@@ -66,7 +68,10 @@ class PosterGridView(context: Context,private val columns: Int,private val sideb
         addItemDecoration(object: ItemDecoration() { override fun getItemOffsets(out: Rect,view: View,parent: RecyclerView,state: State) { out.set(gap,gap,gap,gap) } })
         addOnScrollListener(object: OnScrollListener() { override fun onScrolled(view: RecyclerView,dx: Int,dy: Int) { if(dy>0 && manager.findLastVisibleItemPosition()>=rows.size-columns*2) append() } })
     }
-    private fun posterLimit(height: Int)=(height-(52*resources.displayMetrics.density*resources.configuration.fontScale).toInt()).coerceAtLeast((80*resources.displayMetrics.density).toInt())
+    private fun posterLimit(height: Int): Int {
+        if(compactSearch) return (BrowseLayout.searchPosterHeight(height/resources.displayMetrics.density,resources.configuration.fontScale)*resources.displayMetrics.density).toInt()
+        return (height-(52*resources.displayMetrics.density*resources.configuration.fontScale).toInt()).coerceAtLeast((80*resources.displayMetrics.density).toInt())
+    }
     override fun onSizeChanged(w: Int,h: Int,oldw: Int,oldh: Int) {
         super.onSizeChanged(w,h,oldw,oldh)
         for(i in 0 until childCount) (getChildAt(i) as? PosterCardView)?.maxPosterHeight=posterLimit(h)

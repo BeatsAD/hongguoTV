@@ -9,7 +9,17 @@ class BrowseLayoutTest {
         assertEquals(6,BrowseLayout.home(960f,1f))
         assertEquals(5,BrowseLayout.catalog(960f,1f))
         assertEquals(5,BrowseLayout.ranks(960f,1f))
-        assertEquals(2,BrowseLayout.search(960f,1f))
+        assertEquals(4,BrowseLayout.search(960f,1f))
+    }
+    @Test fun searchReservesTwoRowsWithoutEnlargingFallbackCovers() {
+        assertEquals(2,BrowseLayout.search(640f,1f))
+        assertEquals(3,BrowseLayout.search(960f,1.3f))
+        for(font in listOf(1f,1.3f)) {
+            val poster=BrowseLayout.searchPosterHeight(370f,font)
+            assertTrue(2*(poster+32f*font+10f)+10f<=370f)
+            assertTrue(poster<=140f)
+        }
+        assertTrue(BrowseLayout.searchPosterHeight(180f,1.3f)>=80f)
     }
     @Test fun compactScreenAndLargeFontsReserveReadableNavigationAndCards() {
         for(width in listOf(640f,960f)) for(font in listOf(1f,1.3f)) {
