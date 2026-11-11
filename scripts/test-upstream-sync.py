@@ -225,6 +225,71 @@ class ReviewTests(unittest.TestCase):
         with patch.object(sync, "api", side_effect=[{"workflow_runs": [{"event": "workflow_dispatch", "head_sha": "old"}]}, None]):
             self.assertTrue(sync.ensure_verification(CONFIG, "codex/upstream-sync/test", "candidate"))
 
+    def ci_proposal(self):
+        pr = {"number": 4, "draft": False, "user": {"login": "github-actions[bot]"}, "head": {"sha": "candidate", "ref": "codex/upstream-sync/test", "repo": {"full_name": CONFIG["repository"]}}}
+        run = {"id": 9, "head_sha": "candidate", "head_branch": pr["head"]["ref"], "event": "pull_request", "conclusion": "action_required", "path": ".github/workflows/tv-release.yml", "head_repository": {"full_name": CONFIG["repository"]}, "pull_requests": [{"number": 4}]}
+        return pr, run
+
+    def test_native_ci_activation_recomputes_preservation_before_workflow_approval(self):
+        pr, run = self.ci_proposal()
+        repo = unittest.mock.Mock()
+        repo.git.return_value = "trusted-main"
+        with patch.object(sync, "api", side_effect=[{"workflow_runs": [run]}, None]) as api, patch.object(sync, "fetch_upstream"), patch.object(sync, "verify_candidate") as verify, patch("builtins.print"):
+            self.assertTrue(sync.activate_candidate_checks(repo, CONFIG, pr))
+            verify.assert_called_once_with(repo, CONFIG, "trusted-main", "candidate", pr["head"]["ref"])
+            self.assertEqual(("repos/BeatsAD/hongguoTV/actions/runs/9/approve", "POST"), api.call_args.args)
+
+    def test_modified_or_stale_proposal_cannot_activate_ci(self):
+        pr, run = self.ci_proposal()
+        with patch.object(sync, "api", return_value={"workflow_runs": [run]}) as api, patch.object(sync, "fetch_upstream"), patch.object(sync, "verify_candidate", side_effect=ValueError("preservation failed")):
+            with self.assertRaisesRegex(ValueError, "preservation failed"):
+                sync.activate_candidate_checks(unittest.mock.Mock(), CONFIG, pr)
+            self.assertEqual(1, api.call_count)
+
+    def test_unrelated_workflows_and_already_started_checks_are_not_approved(self):
+        pr, run = self.ci_proposal()
+        for change in [{"head_sha": "old"}, {"head_branch": "foreign"}, {"event": "workflow_dispatch"}, {"conclusion": None}, {"path": ".github/workflows/other.yml"}, {"head_repository": {"full_name": "other/repo"}}, {"pull_requests": []}]:
+            with self.subTest(change=change), patch.object(sync, "api", return_value={"workflow_runs": [run | change]}) as api:
+                self.assertFalse(sync.activate_candidate_checks(unittest.mock.Mock(), CONFIG, pr))
+                self.assertEqual(1, api.call_count)
+
+    def test_manual_or_foreign_proposals_need_owner_to_allow_ci(self):
+        pr, _ = self.ci_proposal()
+        for change in [{"draft": True}, {"user": {"login": "BeatsAD"}}, {"head": pr["head"] | {"ref": "codex/manual"}}, {"head": pr["head"] | {"repo": {"full_name": "other/repo"}}}]:
+            with patch.object(sync, "api") as api:
+                self.assertFalse(sync.activate_candidate_checks(unittest.mock.Mock(), CONFIG, pr | change))
+                api.assert_not_called()
+
+    def test_dispatch_checks_cannot_substitute_for_native_merge_checks(self):
+        pr, run = self.ci_proposal()
+        runs = [run | {"check_suite_id": 1}, run | {"event": "workflow_dispatch", "check_suite_id": 2}, run | {"head_sha": "old", "check_suite_id": 3}]
+        checks = [{"id": number, "check_suite": {"id": number}} for number in [1, 2, 3]]
+        with patch.object(sync, "api", side_effect=[{"workflow_runs": runs}, {"check_runs": checks}]):
+            self.assertEqual([checks[0]], sync.native_checks(CONFIG, pr))
+
+    def test_main_baseline_update_preserves_existing_candidate_and_pins_head(self):
+        pr, _ = self.ci_proposal()
+        repo = unittest.mock.Mock()
+        repo.ancestor.return_value = False
+        repo.git.side_effect = [None, "main-now", None, "main-before"]
+        with patch.object(sync, "fetch_upstream"), patch.object(sync, "verify_candidate") as verify, patch.object(sync, "api") as api, patch("builtins.print"):
+            self.assertTrue(sync.update_candidate_base(repo, CONFIG, pr))
+            verify.assert_called_once_with(repo, CONFIG, "main-before", "candidate", pr["head"]["ref"])
+            self.assertEqual(("repos/BeatsAD/hongguoTV/pulls/4/update-branch", "PUT", {"expected_head_sha": "candidate"}), api.call_args.args)
+
+    def test_updated_main_or_human_edits_do_not_overwrite_candidate(self):
+        pr, _ = self.ci_proposal()
+        repo = unittest.mock.Mock()
+        repo.ancestor.return_value = True
+        with patch.object(sync, "api") as api:
+            self.assertFalse(sync.update_candidate_base(repo, CONFIG, pr))
+            api.assert_not_called()
+        repo.ancestor.return_value = False
+        with patch.object(sync, "fetch_upstream"), patch.object(sync, "verify_candidate", side_effect=ValueError("human edit")), patch.object(sync, "api") as api:
+            with self.assertRaisesRegex(ValueError, "human edit"):
+                sync.update_candidate_base(repo, CONFIG, pr)
+            api.assert_not_called()
+
     def test_manual_development_pr_is_bot_authored_and_owner_requested(self):
         with patch('builtins.print'), patch.dict(os.environ, {'GITHUB_REPOSITORY':CONFIG['repository'],'GITHUB_ACTOR':'BeatsAD'}), patch.object(sync, 'api', side_effect=[{'commit':{'sha':'candidate'}},[],{'html_url':'https://github.com/BeatsAD/hongguoTV/pull/7'},{'workflow_runs':[]},None]) as api:
             sync.propose_local(CONFIG, 'codex/manual-migration')
