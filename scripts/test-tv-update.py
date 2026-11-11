@@ -106,6 +106,8 @@ class ReleaseTests(unittest.TestCase):
 
     def test_notes_contain_both_sections_and_hidden_machine_metadata(self):
         body = update.release_notes(self.config, self.record)
+        self.assertTrue(body.startswith("## 新增功能\n"))
+        self.assertNotIn(f"# hongguo {self.name}", body.split(update.MARKER)[0])
         self.assertEqual(["新增功能", "问题修复"], update.re.findall(r"^## (.+)$", body, update.re.M))
         metadata = update.release_metadata({"tag_name": self.tag, "body": body})
         self.assertEqual(self.code, metadata["versionCode"])
