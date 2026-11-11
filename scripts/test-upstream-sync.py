@@ -35,6 +35,7 @@ class Fixture:
         self.state = {"schema": 1, "observed": self.base, "files": {SOURCE: self.base}, "unresolved": {}}
         self.local[sync.STATE] = self.json(self.state)
         self.local[sync.POLICY] = self.json(CONFIG)
+        self.local[sync.CHANNEL] = b"repository=BeatsAD/hongguoTV\napplicationId=our.package\nversionName=1.0.0\nsignerSha256=unchanged\n"
         self.main = self.commit(self.local, "our main", self.base)
         upstream = dict(self.files)
         if not upstream_delete:
@@ -69,7 +70,7 @@ class Fixture:
 
     def candidate(self):
         state, patches, excluded = sync.plan(self.repo, CONFIG, self.main, self.target, self.work)
-        files = self.local | patches | {sync.STATE: self.json(state)}
+        files = self.local | patches | sync.release_changes(self.repo, self.main, patches) | {sync.STATE: self.json(state)}
         return state, patches, files
 
 
@@ -129,6 +130,55 @@ class MergeTests(unittest.TestCase):
         head = f.commit(files, "discard local changes", f.main)
         with self.assertRaisesRegex(ValueError, "does not preserve local changes"):
             sync.verify_candidate(f.repo, CONFIG, f.main, head, "codex/upstream-sync/fixture")
+
+    def test_release_patch_version_and_notes_are_generated_without_changing_identity(self):
+        f = self.fixture()
+        _, patches, files = f.candidate()
+        release = sync.release_changes(f.repo, f.main, patches)
+        self.assertEqual(f.local[sync.CHANNEL].replace(b"versionName=1.0.0", b"versionName=1.0.1"), release[sync.CHANNEL])
+        path = "kotlin-tv/distribution/notes/1.0.1.md"
+        self.assertIn(b"# hongguo 1.0.1", release[path])
+        self.assertEqual({}, sync.release_changes(f.repo, f.main, {}))
+        for modified in [files | {sync.CHANNEL: release[sync.CHANNEL].replace(b"signerSha256=unchanged", b"signerSha256=other")}, files | {path: b"invented notes\n"}]:
+            head = f.commit(modified, "forged release metadata", f.main)
+            with self.assertRaisesRegex(ValueError, "must remain unchanged"):
+                sync.verify_candidate(f.repo, CONFIG, f.main, head, "codex/upstream-sync/fixture")
+
+    def test_missing_release_version_or_extra_notes_cannot_pass(self):
+        f = self.fixture()
+        _, _, files = f.candidate()
+        for modified in [files | {sync.CHANNEL: f.local[sync.CHANNEL]}, files | {"kotlin-tv/distribution/notes/9.0.0.md": b"unexpected\n"}, {path: data for path, data in files.items() if path != "kotlin-tv/distribution/notes/1.0.1.md"}]:
+            head = f.commit(modified, "missing or extra release metadata", f.main)
+            with self.assertRaises(ValueError):
+                sync.verify_candidate(f.repo, CONFIG, f.main, head, "codex/upstream-sync/fixture")
+
+    def test_existing_release_notes_are_never_overwritten(self):
+        f = self.fixture()
+        base = f.commit(f.local | {"kotlin-tv/distribution/notes/1.0.1.md": b"existing release\n"}, "reserved release", f.main)
+        with self.assertRaisesRegex(ValueError, "already exist"):
+            sync.release_changes(f.repo, base, {SOURCE: b"patch"})
+
+    def test_generated_version_can_publish_after_current_version_is_public(self):
+        f = self.fixture()
+        _, patches, _ = f.candidate()
+        changes = sync.release_changes(f.repo, f.main, patches)
+        spec = importlib.util.spec_from_file_location("publisher", Path(__file__).with_name("tv-update.py"))
+        publisher = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(publisher)
+        config = {"repository": CONFIG["repository"], "applicationId": "our.package", "versionName": "1.0.0", "versionCodeBase": "10000", "versionCodeFloor": "10003"}
+        published = {"tag_name": "v1.0.0", "draft": False, "body": publisher.MARKER + json.dumps({"schema": 2, "packageName": "our.package", "versionName": "1.0.0", "versionCode": 10030}) + " -->"}
+        with self.assertRaisesRegex(AssertionError, "already public"):
+            publisher.allocate(config, 10, [published], "candidate")
+        config["versionName"] = "1.0.1"
+        code, name, tag = publisher.allocate(config, 10, [published], "candidate")
+        self.assertEqual((10031, "1.0.1", "v1.0.1"), (code, name, tag))
+        path = f.root / "kotlin-tv/distribution/notes/1.0.1.md"
+        path.parent.mkdir(parents=True)
+        path.write_bytes(changes["kotlin-tv/distribution/notes/1.0.1.md"])
+        record = {"schema": 2, "packageName": "our.package", "versionName": name, "versionCode": code, "minSdk": 26, "sourceCommit": "candidate", "tag": tag, "reviewedPullRequest": "https://github.com/BeatsAD/hongguoTV/pull/4"}
+        with patch.object(publisher, "ROOT", f.root):
+            notes = publisher.release_notes(config, record)
+        self.assertEqual(name, publisher.release_metadata({"tag_name": tag, "body": notes})["versionName"])
 
     def test_unresolved_state_cannot_be_marked_as_synchronized(self):
         f = Fixture(b"old\n", b"ours\n", b"theirs\n")

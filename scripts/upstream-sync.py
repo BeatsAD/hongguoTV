@@ -13,6 +13,7 @@ from urllib.parse import quote
 ROOT = Path(__file__).resolve().parent.parent
 POLICY = ".github/upstream-sync/policy.json"
 STATE = ".github/upstream-sync/state.json"
+CHANNEL = "kotlin-tv/distribution/channel.properties"
 UPSTREAM_REF = "refs/remotes/sync-upstream/main"
 
 
@@ -141,23 +142,42 @@ def work_directory(repo):
     return Path(tempfile.mkdtemp(prefix="upstream-sync-", dir=out))
 
 
+def release_changes(repo, base, patches):
+    if not patches:
+        return {}
+    original = repo.blob(base, CHANNEL).decode("utf-8")
+    versions = re.findall(r"^versionName=((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))$", original, re.M)
+    require(len(versions) == 1, "A single semantic version is required")
+    major, minor, patch = map(int, versions[0].split("."))
+    version = f"{major}.{minor}.{patch + 1}"
+    path = f"kotlin-tv/distribution/notes/{version}.md"
+    require(repo.blob(base, path) is None, "Next patch release notes already exist; choose the release version manually")
+    channel = re.sub(r"^versionName=.*$", f"versionName={version}", original, count=1, flags=re.M).encode()
+    notes = f"# hongguo {version}\n\n## 新增功能\n- 无。\n\n## 问题修复\n- 同步经过审核的上游兼容性修复。\n".encode()
+    return {CHANNEL: channel, path: notes}
+
+
 def verify_candidate(repo, config, base, head, branch, upstream_ref=UPSTREAM_REF):
     if not branch.startswith(config["candidatePrefix"]):
         return {"syncCandidate": False, "message": "Normal PR: human review and TV validation still required"}
     require(repo.ancestor(base, head), "Sync branch must include current main before approval")
     changed = repo.changed(base, head)
-    require(set(changed) <= set(config["automaticPaths"]) | {STATE}, "UI, features, existing tests, signing and update policy must remain unchanged")
+    allowed = set(config["automaticPaths"]) | {STATE, CHANNEL}
+    require(all(path in allowed or re.fullmatch(r"kotlin-tv/distribution/notes/[0-9]+\.[0-9]+\.[0-9]+\.md", path) for path in changed), "UI, features, existing tests, signing and update policy must remain unchanged")
     for path in changed:
         require(repo.blob(head, path) is not None, f"Deletion is not allowed: {path}")
     state = repo.read_json(head, STATE)
     require(repo.ancestor(state["observed"], upstream_ref), "Candidate target is not from canonical upstream history")
     expected, patches, _ = plan(repo, config, base, state["observed"], work_directory(repo))
     require(state == expected, "Do not advance unresolved baselines or edit generated state by hand")
-    require(set(changed) == set(patches) | {STATE}, "Unexpected or missing sync changes")
+    release = release_changes(repo, base, patches)
+    require(set(changed) == set(patches) | {STATE} | set(release), "Unexpected or missing sync changes or generated release version")
     for path, data in patches.items():
         require(repo.blob(head, path) == data, f"Three-way merge does not preserve local changes: {path}")
+    for path, data in release.items():
+        require(repo.blob(head, path) == data, f"Only generated patch version and notes may change; other release fields must remain unchanged: {path}")
     require(bool(patches), "No compatible source patch; keep this proposal as a draft for manual migration")
-    return {"syncCandidate": True, "changedSources": list(patches), "unresolved": state["unresolved"], "protectedFilesUnchanged": True}
+    return {"syncCandidate": True, "changedSources": list(patches), "generatedReleaseFiles": list(release), "unresolved": state["unresolved"], "protectedFilesUnchanged": True}
 
 
 def approved(reviews, head_sha, reviewer):
@@ -317,6 +337,7 @@ def detect(repo, config, upstream_target=None):
         print("No new changes in automatically synchronized core paths.")
         return
     updated, patches, excluded = plan(repo, config, "HEAD", target, work)
+    release = release_changes(repo, "HEAD", patches)
     fingerprints = {path: hashlib.sha256(repo.blob(target, path) or b"<missing>").hexdigest() for path in config["automaticPaths"]}
     signature = hashlib.sha256(json.dumps(fingerprints, sort_keys=True).encode()).hexdigest()[:16]
     branch = config["candidatePrefix"] + signature
@@ -326,14 +347,14 @@ def detect(repo, config, upstream_target=None):
         return
     require(not repo.git("status", "--porcelain"), "Start from a clean main checkout")
     repo.git("switch", "-c", branch)
-    for path, data in patches.items():
+    for path, data in (patches | release).items():
         destination = repo.root / path
         require(not destination.is_symlink(), "Do not follow source symlinks")
         require(destination.resolve().is_relative_to(repo.root.resolve()), "Do not follow directories outside the checkout")
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_bytes(data)
     (repo.root / STATE).write_text(json.dumps(updated, indent=2) + "\n")
-    repo.git("add", "--", *patches.keys(), STATE)
+    repo.git("add", "--", *patches.keys(), *release.keys(), STATE)
     repo.git("config", "user.name", "github-actions[bot]")
     repo.git("config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com")
     repo.git("commit", "-m", f'同步上游核心修复 {target[:12]}，保留本地界面与功能')
@@ -354,7 +375,7 @@ def detect(repo, config, upstream_target=None):
 保留的重叠冲突：
 {unresolved}
 
-界面、遥控交互、现有功能测试、包名、签名、更新渠道和依赖配置均保持 main 原样。使用逐文件三方合并；未整体覆盖上游文件。
+界面、遥控交互、现有功能测试、包名、签名、更新渠道和依赖配置均保持 main 原样。仅将 versionName 的补丁号加一并生成对应更新说明，供本次审核一起核对，避免复用已发布版本。使用逐文件三方合并；未整体覆盖上游文件。
 
 本次另有 {len(excluded)} 个上游原生路径未自动引入，包括界面、新功能、依赖和测试。完整清单见本次检测工作流附件，需要移植时另行审核。
 
