@@ -1,0 +1,78 @@
+# SPDX-License-Identifier: MIT
+name: Bug 反馈
+description: 报告可复现的安装、浏览、遥控器或播放问题。
+title: '[Bug] '
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请先阅读[安装与使用指南](https://github.com/BeatsAD/hongguoTV/blob/main/docs/INSTALL.zh-CN.md)和[兼容性说明](https://github.com/BeatsAD/hongguoTV/blob/main/docs/COMPATIBILITY.zh-CN.md)，并搜索已有反馈。
+        **疑似安全漏洞请使用私密报告，不要公开密钥、Cookie、签名播放地址、设备身份或私人备份。**
+  - type: input
+    id: version
+    attributes:
+      label: 应用版本与构建号
+      description: 在设置中的版本信息查看，并说明来自本仓库 Release、上游或自行构建。
+      placeholder: 例如 0.10.5+3-playbackfix / 10003，本仓库 Release
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: 设备与系统
+      description: 电视或盒子型号、Android 版本；模拟器请注明 API 和 CPU 架构。
+      placeholder: 品牌 / 型号，Android 版本，真机或模拟器
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: 问题位置
+      options:
+        - 安装与更新
+        - 首页、分类或搜索
+        - 详情与选集
+        - 播放、声音或画面
+        - 遥控器与焦点
+        - 片单、记录或备份
+        - 其他
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 最小复现步骤
+      description: 从哪个页面开始、依次按了哪些键、是否每次都发生；播放问题可填写剧名和集数，不要贴播放签名地址。
+      placeholder: |
+        1. 打开……
+        2. 按……
+        3. 出现……
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期结果
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际结果
+      description: 请保留屏幕上的错误原文，说明是无内容、缓冲、黑屏、无声还是闪退。
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 截图、诊断与已尝试的方法
+      description: 可附设置或错误页中的“诊断详情”。说明网络、画质及是否尝试其他剧；上传前检查隐私，不要附完整私人备份。
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: 提交前确认
+      options:
+        - label: 我已检查并移除截图与日志中的密钥、身份、签名地址和私人数据。
+          required: true
+        - label: 如果疑似涉及安全漏洞，我会改用仓库的私密漏洞报告入口。
+          required: true

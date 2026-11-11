@@ -2,6 +2,8 @@
 
 这是独立的 **Kotlin + Android 原生 View + Media3** 工程，最低 Android 8.0 / API 26。安装一个 APK，联网后可直接浏览和播放，无需部署 Node、Docker 或填写服务器地址。
 
+[中文安装与使用指南](../docs/INSTALL.zh-CN.md) · [兼容性说明](../docs/COMPATIBILITY.zh-CN.md) · [界面截图](../README.md#界面展示)
+
 - 应用名称：红果 TV
 - 个人分发包名：`com.hongguotv.nativeapp.playbackfix`，沿用当前测试设备数据。历史正式包 `com.hongguotv.nativeapp` 与旧 `com.hongguotv` 独立。
 - 收藏和历史独立保存在本机，不自动迁移旧版数据。
@@ -204,7 +206,7 @@ HONGGUOTV_VERSION_CODE=10003 HONGGUOTV_VERSION_NAME=0.10.5+3 ./kotlin-tv/gradlew
 - `core/src/test/`：固定签名对照、NIST AES-CTR 向量、跨样本/非对齐分段、AVC 索引恢复及畸形输入校验。
 - `tools/signing-oracle.cjs`：仅开发期生成兼容性测试样本；运行、构建 APK 不需要它。
 
-播放器直接通过 HTTPS 分段拉取数据，经本机 Kotlin 处理后交给 Media3。没有 JS 引擎或常驻内容服务。仅在用户打开「手机输入」或「手机备份与恢复」窗口时，APK 临时监听局域网 HTTP；最长 5 分钟，窗口关闭或应用进入后台后停止。备份下载每次二维码一次，上传成功后关闭会话并等待电视确认。页面不处理平台账号凭据或媒体。媒体只在内存中处理，不下载整部剧到存储。元数据响应、封面大小、索引数量和播放缓冲均有上限。
+播放器直接通过 HTTPS 分段拉取数据，经本机 Kotlin 处理后交给 Media3。没有 JS 引擎或常驻内容服务。仅在用户使用手机输入或备份功能时，APK 临时监听局域网 HTTP；搜索页手机输入会话最长 15 分钟，备份会话最长 5 分钟，离开相应页面、关闭窗口或应用进入后台后停止。备份下载每次二维码一次，上传成功后关闭会话并等待电视确认。页面不处理平台账号凭据或媒体。媒体只在内存中处理，不下载整部剧到存储。元数据响应、封面大小、索引数量和播放缓冲均有上限。
 
 ```sh
 # 可选联网检查：真实网站和内容接口，网络变化可能导致失败

@@ -1,5 +1,9 @@
 # 红果 TV
 
+![红果 TV 封面：大屏看短剧](docs/assets/hongguo-tv-cover.png)
+
+**简体中文** · [安装与使用](docs/INSTALL.zh-CN.md) · [兼容性](docs/COMPATIBILITY.zh-CN.md) · [Bug 反馈](https://github.com/BeatsAD/hongguoTV/issues/new?template=bug_report.yml) · [功能建议](https://github.com/BeatsAD/hongguoTV/issues/new?template=feature_request.yml)
+
 面向 Android 电视和电视盒子的非官方短剧、漫剧客户端，支持遥控器浏览、搜索、选集和连续播放。
 
 当前应用采用 **Kotlin + Android 原生 View + Media3**，最低支持 **Android 8.0（API 26）**。安装一个 APK，联网即可使用，无需部署 Node、Docker 或填写服务器地址。
@@ -7,6 +11,14 @@
 **[下载最新版 APK](https://github.com/BeatsAD/hongguoTV/releases/latest)** · [原生版详细说明](kotlin-tv/README.md) · [应用内更新与构建配置](kotlin-tv/AUTO_UPDATES.md)
 
 本仓库是 [N3urda/hongguoTV](https://github.com/N3urda/hongguoTV) 的个人维护分支，使用独立的分发和更新渠道。下载本仓库的安装包时，请使用上方入口。
+
+## 界面展示
+
+| 首页与剧架 | 版本与更新 |
+| --- | --- |
+| ![红果 TV 首页，构建 10003 的实际模拟器截图](docs/assets/screenshots/home-0.10.5-build10003.png) | ![红果 TV 版本与更新，构建 10003 的实际模拟器截图](docs/assets/screenshots/updates-0.10.5-build10003.png) |
+
+截图来自 `0.10.5+3-playbackfix / 10003` 在 Android TV API 31 模拟器上的实际运行，未重绘界面；它们展示该版本界面，不代表实体电视验收。封面为 AI 生成宣传插画。素材来源与校验见[展示素材说明](docs/assets/README.md)。
 
 ## 当前功能
 
@@ -28,6 +40,8 @@
 
 上游或历史安装包可能使用不同包名、签名；收藏与进度不会自动迁移。遇到签名冲突或版本不匹配时，先核对安装包来源与本机版本；不要通过卸载、清除数据或降级解决。
 
+U 盘安装、ADB 示例、备份恢复与常见问题见[中文安装与使用指南](docs/INSTALL.zh-CN.md)。系统、CPU 架构、解码及版本验证边界见[兼容性说明](docs/COMPATIBILITY.zh-CN.md)。
+
 ### 遥控器操作
 
 | 场景 | 操作 |
@@ -40,7 +54,7 @@
 | 更多播放操作 | 播放时按上方向键或菜单键 |
 | 返回 | 先关闭选集或收起播放浮层，再退出播放 |
 
-手机输入和备份需要手机与电视处于同一局域网，二维码最长有效 5 分钟；关闭窗口或应用进入后台后失效。恢复备份需要在电视上确认。
+手机输入和备份需要手机与电视处于同一局域网。搜索页的手机输入会话最长 15 分钟，备份会话最长 5 分钟；离开相应页面、关闭窗口或应用进入后台后失效。恢复备份需要在电视上确认。
 
 ## 版本与更新
 
@@ -81,16 +95,29 @@
 
 播放依赖第三方接口与设备解码能力，接口、签名或网络变化可能影响内容可用性。遇到解码失败可尝试降低清晰度；仍有问题时，请提供电视型号、Android 版本、应用版本、复现步骤及「诊断详情」中的记录。
 
+## 参与贡献与安全
+
+- 普通问题使用 [Bug 反馈表单](https://github.com/BeatsAD/hongguoTV/issues/new?template=bug_report.yml)，功能需求使用[功能建议表单](https://github.com/BeatsAD/hongguoTV/issues/new?template=feature_request.yml)。提交前请搜索已有反馈，移除截图与日志中的私人数据。
+- 疑似漏洞通过[私密漏洞报告](https://github.com/BeatsAD/hongguoTV/security/advisories/new)提交，不要先在公开 Issue 或 PR 中披露密钥、设备身份、签名播放地址或漏洞细节。
+- 贡献代码前阅读[贡献指南](CONTRIBUTING.md)，PR 请说明问题、最终行为、验证结果与兼容性影响。
+- 仓库已启用依赖安全提醒和 `main` 保护；配置边界见[仓库协作与安全设置](docs/REPOSITORY.zh-CN.md)。提醒与分支保护不能替代测试和安全审查。
+
 ## 项目资料
 
+- [中文安装与使用指南](docs/INSTALL.zh-CN.md)
+- [系统、设备与安装包兼容性](docs/COMPATIBILITY.zh-CN.md)
 - [原生版功能、构建与历史版本说明](kotlin-tv/README.md)
 - [个人分发流水线与应用内更新](kotlin-tv/AUTO_UPDATES.md)
 - [原生视觉与遥控器交互规范](kotlin-tv/DESIGN.md)
 - [账号同步调查与现阶段边界](docs/ACCOUNT_SYNC.md)
 - [React Native 版历史使用、部署与构建说明](docs/REACT_NATIVE_LEGACY.md)
+- [贡献指南与 PR 约定](CONTRIBUTING.md)
+- [许可证中文说明与 MIT 适用范围](docs/LICENSING.zh-CN.md)
 
 ## 来源与许可证
 
 项目与红果官方无关联。原生源码及派生实现按 GPL-3.0-only 发布，详见 [LICENSE](LICENSE) 和[原生版第三方声明](kotlin-tv/NOTICE.md)；第三方部分保留各自许可。
+
+新增的独立 Bug、功能建议和 PR 模板采用 [MIT](LICENSES/MIT-community-templates.txt)，方便其他项目复用。**MIT 仅覆盖这三个模板，不改变应用及 GPL 派生代码的许可证。** 完整范围见[中文许可说明](docs/LICENSING.zh-CN.md)。
 
 历史 Node 服务的 `drpys` 来源、许可证和固定提交记录见[第三方说明](server/vendor/NOTICE.md)。根目录 Android / tvOS 历史工程骨架源于 MIT 许可的 RN TV 模板。
