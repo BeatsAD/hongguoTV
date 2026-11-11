@@ -15,7 +15,12 @@ spec.loader.exec_module(update)
 
 class ReleaseTests(unittest.TestCase):
     def setUp(self):
-        self.config = update.channel()
+        # Version-ordering examples use a fixed fixture, independently of the
+        # checkout's next release version. Identity still comes from the channel.
+        self.config = update.channel() | {"versionName": "1.0.0"}
+        channel_fixture = patch.object(update, "channel", return_value=self.config)
+        channel_fixture.start()
+        self.addCleanup(channel_fixture.stop)
         self.code, self.name, self.tag = update.version(self.config, 1)
         self.badging = (f"package: name='{self.config['applicationId']}' versionCode='{self.code}' versionName='{self.name}'\n"
                         f"sdkVersion:'{self.config['minSdk']}'\napplication-label:'hongguo'\nuses-permission: name='android.permission.REQUEST_INSTALL_PACKAGES'\n")
