@@ -604,6 +604,18 @@ class MainActivity: Activity() {
         val ticket=generation
         work({ prefetched ?: RemoteVideo(repository.http,repository.stream(requestedId,maxQuality) { it.variantKey !in rejected && playbackAttempt.withinNetworkLimit(it) && decoderSupport.supports(it) },closeExecutor=networkCleanup).prepare() }, { remote ->
             video=remote; quality=remote.info.quality
+            val texture=decoderSupport.softwareOnly(remote.info)
+            if(texture != (playerView?.videoSurfaceView is android.view.TextureView)) {
+                val old=playerView
+                old?.player=null;root.removeView(old)
+                val view=(if(texture) layoutInflater.inflate(R.layout.video_player_texture,root,false) as PlayerView else PlayerView(this)).apply {
+                    useController=false;resizeMode=frameResizeMode();isFocusable=false
+                    setKeepContentOnPlayerReset(true);setShutterBackgroundColor(Color.BLACK)
+                    setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS)
+                }
+                playerView=view;root.addView(view,0,FrameLayout.LayoutParams(-1,-1));view.player=player
+            }
+            Diagnostics.record("视频输出",if(texture) "TextureView（软件解码）" else "SurfaceView")
             Diagnostics.record("播放准备","quality=$quality codec=${remote.info.codec} elapsedMs=${android.os.SystemClock.elapsedRealtime()-playbackStarted}")
             val p=player ?: run {
                 val load=DefaultLoadControl.Builder().setBufferDurationsMs(15000,30000,1000,2000).setTargetBufferBytes(12*1024*1024).build()
