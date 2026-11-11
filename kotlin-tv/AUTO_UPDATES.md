@@ -1,6 +1,6 @@
 # hongguo 版本、APK 发布与应用内更新
 
-当前开发基线为 **1.0.0**，正式安装包命名为 **`hongguo-1.0.0.apk`**。生产 Android 源码位于 `kotlin-tv/`，个人渠道为 `BeatsAD/hongguoTV`。最新已公开的版本以 [Releases](https://github.com/BeatsAD/hongguoTV/releases/latest) 为准，修改版本配置不表示已经发布。
+当前正式版为 **[1.0.0](https://github.com/BeatsAD/hongguoTV/releases/tag/v1.0.0)**，正式安装包命名为 **`hongguo-1.0.0.apk`**，于 2026-11-11 发布。生产 Android 源码位于 `kotlin-tv/`，个人渠道为 `BeatsAD/hongguoTV`。最新已公开的版本以 [Releases](https://github.com/BeatsAD/hongguoTV/releases/latest) 为准，修改版本配置不表示已经发布。
 
 ## 名称与版本
 
@@ -60,7 +60,7 @@ API 响应受大小和超时限制。应用前台浏览时每 6 小时检查，�
 2. 查询历史 Release，自动分配内部编号；使用 JDK 17、SDK 36 / Build Tools 36.0.0 构建并运行 `lintDistribution`。
 3. 检查 APK 实际名称、包名、版本、最低 API、非调试标记、安装权限和既有签名。
 4. 输出被忽略的 `outputs/releases/v1.0.0/hongguo-1.0.0.apk`、`release-record.json` 和 `release-notes.md`。后两者用于内部复核，**不上传到 Release 附件**。
-5. 创建草稿，仅上传 APK；读回附件大小、摘要和完成状态，全部匹配后公开并按内部编号与显示版本判断能否设为 latest。失败保留旧 latest，不使用 `--clobber`，不删除已有附件。
+5. 创建草稿，仅上传 APK；读回附件大小、摘要和完成状态，全部匹配后公开并按内部编号与显示版本判断能否设为 latest。按标签查询未找到时，通过已认证且分页的 Release 列表查找草稿，权限错误仍停止。失败保留旧 latest，不使用 `--clobber`，不删除已有附件。
 
 不再单独上传源码 ZIP、`SHA256SUMS` 或 `update.json`。源码通过对应公开 Git 标签及其构建说明提供，GitHub 自动生成的源码 ZIP / tar.gz 下载链接仍会显示。
 
