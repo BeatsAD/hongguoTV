@@ -1,0 +1,15 @@
+{
+  "tag_name": "v1.0.0",
+  "draft": false,
+  "prerelease": false,
+  "body": "## 新增功能\n- 以 1.0.0 开始独立版本维护，应用和安装包统一使用 hongguo 名称。\n- 支持直接读取 GitHub Release 检查、下载并校验新版，发布附件只需一个 APK。\n\n## 问题修复\n- 修正更新器仅识别旧安装包名称和标签的限制，支持 hongguo-版本号.apk 与简洁版本显示。\n- 修正正式版本显示夹带调试后缀和流水线编号的问题；内部构建号继续自动递增，沿用现有包名和签名保留数据升级。\n\n旧版首次升级到 1.0.0 需要手动下载并覆盖安装一次，之后继续在应用内更新。请勿卸载或清除数据。\n\n---\nAndroid 8.0+。使用相同包名和签名覆盖升级，保留本机记录。\n[对应源码与构建说明](https://github.com/BeatsAD/hongguoTV/tree/v1.0.0)。\n\n<!-- hongguo-update:{\"schema\":2,\"packageName\":\"com.hongguotv.nativeapp.playbackfix\",\"versionCode\":10004,\"versionName\":\"1.0.0\",\"minSdk\":26,\"sourceCommit\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"reviewedPullRequest\":null} -->\n",
+  "assets": [
+    {
+      "name": "hongguo-1.0.0.apk",
+      "state": "uploaded",
+      "size": 21,
+      "digest": "sha256:ef91da42703786a591873cf228c55daf8a767d275f87c333fe30d6f2af0418bf",
+      "browser_download_url": "https://untrusted.example/ignore.apk"
+    }
+  ]
+}

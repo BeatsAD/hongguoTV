@@ -41,7 +41,7 @@ class CinemaHero(context: Context,private val load: (ImageView,String)->Unit,pri
         background=GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,intArrayOf(Color.rgb(25,26,31),Color.rgb(17,18,22))).apply { cornerRadius=dp(18).toFloat() }
         addView(poster,LayoutParams(dp(173),dp(260),Gravity.START or Gravity.CENTER_VERTICAL).apply { leftMargin=dp(20) })
         val eyebrow=LinearLayout(context).apply { gravity=Gravity.CENTER_VERTICAL }
-        eyebrow.addView(label(10f,TvStyle.background).apply { text="红果"; setPadding(dp(5),dp(2),dp(5),dp(2)); background=TvStyle.shape(context,TvStyle.accent,radius=4) })
+        eyebrow.addView(label(10f,TvStyle.background).apply { text="hongguo"; setPadding(dp(5),dp(2),dp(5),dp(2)); background=TvStyle.shape(context,TvStyle.accent,radius=4) })
         eyebrow.addView(eyebrowContext,LinearLayout.LayoutParams(-2,-2).apply { leftMargin=dp(9) })
         copy.addView(eyebrow,LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=dp(10) })
         copy.addView(title,LinearLayout.LayoutParams(-1,dp(90))); copy.addView(meta,LinearLayout.LayoutParams(-1,-2).apply { topMargin=dp(8) })
@@ -57,7 +57,7 @@ class CinemaHero(context: Context,private val load: (ImageView,String)->Unit,pri
         val longTitle=(value?.title?.length ?: 0)>8; val large=resources.configuration.fontScale>1.2f
         title.setAutoSizeTextTypeUniformWithConfiguration(24,if(longTitle) 34 else 40,2,android.util.TypedValue.COMPLEX_UNIT_SP)
         title.layoutParams=title.layoutParams.apply { height=dp(if(longTitle) if(large) 108 else 90 else if(large) 82 else 62) }
-        title.text=value?.title ?: "红果 TV"; meta.text=value?.let { listOf(it.tags,it.badge,status).filter(String::isNotBlank).distinct().joinToString("  ") }.orEmpty()
+        title.text=value?.title ?: "hongguo"; meta.text=value?.let { listOf(it.tags,it.badge,status).filter(String::isNotBlank).distinct().joinToString("  ") }.orEmpty()
         description.text=value?.description.orEmpty(); description.visibility=if(description.text.isBlank()) GONE else VISIBLE; play.text=playLabel
         actions.forEach { it.isEnabled=value!=null; it.isFocusable=value!=null; it.alpha=if(value==null) .4f else 1f }
         if(value?.cover.orEmpty()!=url) { url=value?.cover.orEmpty(); cover.setImageDrawable(null); if(url.isNotBlank()) load(cover,url) }
