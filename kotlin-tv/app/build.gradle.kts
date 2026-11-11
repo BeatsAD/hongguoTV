@@ -6,6 +6,14 @@ val updateChannel = Properties().apply { rootProject.file("distribution/channel.
 fun signingValue(env: String, key: String): String? = System.getenv(env) ?: signingProperties.getProperty(key)
 require(updateChannel.getProperty("applicationId") == "com.hongguotv.nativeapp.playbackfix")
 require(updateChannel.getProperty("repository").matches(Regex("[A-Za-z0-9][A-Za-z0-9_.-]{0,99}/[A-Za-z0-9][A-Za-z0-9_.-]{0,99}")))
+if (gradle.startParameter.taskNames.any { it.contains("distribution", ignoreCase = true) }) {
+    require((System.getenv("HONGGUOTV_VERSION_CODE")?.toIntOrNull() ?: 0) > updateChannel.getProperty("versionCodeFloor").toInt()) {
+        "Allocate a build number first with scripts/tv-update.py version or scripts/build-kotlin.sh"
+    }
+    require(System.getenv("HONGGUOTV_VERSION_NAME") == updateChannel.getProperty("versionName")) {
+        "Distribution version must match the channel version"
+    }
+}
 
 android {
     namespace = "com.hongguotv.nativeapp"
@@ -14,8 +22,8 @@ android {
         applicationId = "com.hongguotv.nativeapp"
         minSdk = 26
         targetSdk = 36
-        versionCode = System.getenv("HONGGUOTV_VERSION_CODE")?.toInt() ?: 50
-        versionName = System.getenv("HONGGUOTV_VERSION_NAME") ?: "0.10.4"
+        versionCode = System.getenv("HONGGUOTV_VERSION_CODE")?.toInt() ?: (updateChannel.getProperty("versionCodeFloor").toInt() + 1)
+        versionName = System.getenv("HONGGUOTV_VERSION_NAME") ?: updateChannel.getProperty("versionName")
         buildConfigField("boolean", "ONLINE_UPDATES", "false")
         buildConfigField("String", "UPDATE_REPOSITORY", "\"${updateChannel.getProperty("repository")}\"")
     }
@@ -29,12 +37,11 @@ android {
         }
     }
     buildTypes {
-        getByName("debug") { applicationIdSuffix = ".playbackfix"; versionNameSuffix = "-playbackfix" }
+        getByName("debug") { applicationIdSuffix = ".playbackfix"; versionNameSuffix = "-debug" }
         getByName("release") { signingConfig = signingConfigs.getByName("delivery"); isMinifyEnabled = true; proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro") }
         create("distribution") {
             initWith(getByName("release"))
             applicationIdSuffix = ".playbackfix"
-            versionNameSuffix = "-playbackfix"
             buildConfigField("boolean", "ONLINE_UPDATES", "true")
             matchingFallbacks += listOf("release")
         }
