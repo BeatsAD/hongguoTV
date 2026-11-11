@@ -41,7 +41,7 @@ internal class BrowseStatus(context: Context,action: ()->Unit): LinearLayout(con
     private val diagnostics=BrowseButton(context,"诊断详情",BrowseButton.Role.TEXT) {
         DiagnosticDialog.create(context).also { dialog ->
             dialog.setOnDismissListener { button.requestFocus() }
-            dialog.show();TvDialogStyle.apply(dialog)
+            TvDialogStyle.show(dialog)
         }
     }
     val actionView: View get()=button

@@ -13,6 +13,7 @@
         <item name="android:colorButtonNormal">#25262C</item>
     </style>
     <style name="TvDialogTheme" parent="android:style/Theme.Material.Dialog.Alert">
+        <item name="android:windowAnimationStyle">@style/TvDialogMotion</item>
         <item name="android:windowBackground">@drawable/dialog_surface</item>
         <item name="android:colorAccent">#D58098</item>
         <item name="android:textColorPrimary">#F5F3F2</item>
@@ -20,5 +21,17 @@
         <item name="android:colorButtonNormal">#25262C</item>
         <item name="android:backgroundDimAmount">0.72</item>
         <item name="android:windowMinWidthMajor">45%</item>
+    </style>
+    <style name="TvDialogMotion">
+        <item name="android:windowEnterAnimation">@anim/tv_dialog_enter</item>
+        <item name="android:windowExitAnimation">@anim/tv_dialog_exit</item>
+    </style>
+    <style name="TvPanelMotion">
+        <item name="android:windowEnterAnimation">@anim/tv_panel_enter</item>
+        <item name="android:windowExitAnimation">@anim/tv_panel_exit</item>
+    </style>
+    <style name="TvFadeMotion">
+        <item name="android:windowEnterAnimation">@anim/tv_fade_enter</item>
+        <item name="android:windowExitAnimation">@anim/tv_fade_exit</item>
     </style>
 </resources>

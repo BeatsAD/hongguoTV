@@ -11,7 +11,10 @@ import com.hongguotv.core.ContentType
 /** The same shell is used by browsing and detail; the sidebar stays reachable at small heights. */
 internal class BrowseScaffold(context: Context,route: String,type: ContentType,navigate: (String,ContentType)->Unit): LinearLayout(context) {
     private val ui=BrowseUi(context)
-    val body=ui.column()
+    private val contentHost=PageTransitionHost(context)
+    var body=ui.column()
+        private set
+    var navigateTo=navigate
     val navigation=mutableListOf<View>()
     private val destinations=mutableMapOf<SidebarButton,Pair<String,ContentType?>>()
     lateinit var selectedNav: View
@@ -32,7 +35,7 @@ internal class BrowseScaffold(context: Context,route: String,type: ContentType,n
         fun item(parent: LinearLayout,label: String,key: String,genre: ContentType?=null) {
             val chosen=route==key && (key!="catalog" || genre==type)
             val kind=when(key) { "home"->TvGlyph.Kind.HOME;"search"->TvGlyph.Kind.SEARCH;"ranks"->TvGlyph.Kind.RANK;"library"->TvGlyph.Kind.BOOKMARK;"settings"->TvGlyph.Kind.SETTINGS;else->when(genre) { ContentType.COMIC->TvGlyph.Kind.LAYERS;ContentType.AI->TvGlyph.Kind.AI;else->TvGlyph.Kind.FILM } }
-            val button=SidebarButton(context,label,kind,chosen) { navigate(key,genre ?: type) }.apply { tag="browse:$key:${genre?.storedValue.orEmpty()}" }
+            val button=SidebarButton(context,label,kind,chosen) { navigateTo(key,genre ?: type) }.apply { tag="browse:$key:${genre?.storedValue.orEmpty()}" }
             parent.addView(button,LayoutParams(-1,-2).apply { bottomMargin=ui.dp(6) });navigation+=button;destinations[button]=key to genre;if(chosen) selectedNav=button
         }
         item(navBody,"首页","home");item(navBody,"搜索","search");item(navBody,"榜单","ranks");item(navBody,"我的片单","library")
@@ -42,12 +45,21 @@ internal class BrowseScaffold(context: Context,route: String,type: ContentType,n
         if(!::selectedNav.isInitialized) selectedNav=navigation.first()
         val inset=ui.dp(BrowseLayout.inset(width).toInt())
         body.setPadding(inset,ui.dp(if(compact) 12 else 16),ui.dp(if(compact) 16 else 26),ui.dp(16))
-        addView(body,LayoutParams(0,-1,1f))
+        contentHost.replace(body,animate=false)
+        addView(contentHost,LayoutParams(0,-1,1f))
         navigation.forEachIndexed { index,view ->
             view.nextFocusUpId=navigation.getOrNull(index-1)?.id ?: view.id;view.nextFocusDownId=navigation.getOrNull(index+1)?.id ?: view.id;view.nextFocusLeftId=view.id
             view.setOnKeyListener { _,key,event -> if(key==KeyEvent.KEYCODE_DPAD_RIGHT && event.action==KeyEvent.ACTION_DOWN) { enterContent();true } else false }
         }
     }
+    fun beginPage(duration: Long=TvMotion.PAGE,direction: Float=1f,animate: Boolean=true): LinearLayout {
+        val width=TvStyle.windowDp(context);val compact=BrowseLayout.compact(width)
+        val inset=ui.dp(BrowseLayout.inset(width).toInt())
+        body=ui.column().apply { setPadding(inset,ui.dp(if(compact) 12 else 16),ui.dp(if(compact) 16 else 26),ui.dp(16)) }
+        contentHost.replace(body,duration,direction,animate)
+        return body
+    }
+    fun finishMotion()=contentHost.finish()
     fun select(route: String,type: ContentType) {
         destinations.forEach { (button,destination) ->
             val selected=destination.first==route && (route!="catalog" || destination.second==type)

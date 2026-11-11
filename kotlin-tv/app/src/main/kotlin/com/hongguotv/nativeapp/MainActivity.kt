@@ -53,6 +53,8 @@ class MainActivity: Activity() {
     private var initialCatalogPending=true
     private var restoreStoppedPage=false
     private var pendingDetail: Series?=null
+    private var detailLoading: DetailLoadingView?=null
+    private var playbackCover: View?=null
     private var detailAutoplay=true
     private var detailFromStart=false
     private var libraryLoadError: Throwable?=null
@@ -115,7 +117,7 @@ class MainActivity: Activity() {
             }
         }
     }
-    private lateinit var root: FrameLayout
+    private lateinit var root: PageTransitionHost
     private var generation=0
     private var screen=Screen.CATALOG
     private var tab=0
@@ -150,7 +152,7 @@ class MainActivity: Activity() {
             if(refreshedAt-lastFreshnessPoll>=30_000L) { lastFreshnessPoll=refreshedAt; refreshCurrentContent(allowNetwork=false) }
             if(screen==Screen.PLAYER) {
                 if(sleepTimer.poll()) stopForSleep()
-                if(playError) updateFailureStatus() else if(hud.visibility==View.VISIBLE) updatePlaybackText()
+                if(playError) updateFailureStatus() else if(TvMotion.isVisible(hud)) updatePlaybackText()
                 checkBuffering()
                 maybePrefetch()
                 val now=android.os.SystemClock.elapsedRealtime()
@@ -188,10 +190,10 @@ class MainActivity: Activity() {
         repository.requestGate.restore(cooldowns.all.mapNotNull { (host,value) -> (value as? Long)?.let { host to it } }.toMap())
         repository.requestGate.changed={ values -> cooldowns.edit().apply { values.forEach { (host,until) -> putLong(host,until) } }.apply() }
         window.decorView.systemUiVisibility=View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-        library=Library(this,::onLibrarySaveState); artwork=ArtworkLoader(this); tvTools=TvTools(this); root=FrameLayout(this).apply { setBackgroundColor(bg) }; setContentView(root)
+        library=Library(this,::onLibrarySaveState); artwork=ArtworkLoader(this); tvTools=TvTools(this); root=PageTransitionHost(this).apply { setBackgroundColor(bg) }; setContentView(root)
         updater=AppUpdater(this) { foreground && library.isLoaded && screen==Screen.CATALOG && !tvTools.showing }
         browser=NativeBrowseController(this,repository,library,::loadCover,{ series,resume -> openDetail(series,resume) },::quickActions,
-            { title,message,anchor -> tvTools.info(title,message,anchor) },{ body,anchor -> nav.clear();repeat(7) { nav.add(anchor) };settings(body) },{ selected -> tab=selected },{ favoriteMonitor.check(force=true) },{ favoriteMonitor.status },{ anchor -> tvTools.confirm("清空观看记录","清除本机所有观看进度？收藏会保留。",anchor) { library.clearHistory();browser.refreshLibrary() } })
+            { title,message,anchor -> tvTools.info(title,message,anchor) },{ body,anchor -> nav.clear();repeat(7) { nav.add(anchor) };settings(body) },{ selected -> tab=selected },{ favoriteMonitor.check(force=true) },{ favoriteMonitor.status },{ anchor -> tvTools.confirm("清空观看记录","清除本机所有观看进度？收藏会保留。",anchor) { library.clearHistory();browser.refreshLibrary() } },retireArtwork={ artwork.cancelPage(keepDisplayed=true) })
         browser.restore(state)
         connectivity=getSystemService(ConnectivityManager::class.java)
         runCatching { connectivity.registerDefaultNetworkCallback(networkCallback); networkRegistered=true }
@@ -247,7 +249,7 @@ class MainActivity: Activity() {
         (io as? java.util.concurrent.ThreadPoolExecutor)?.purge()
     }
     private fun invalidatePage() {
-        generation++; cancelWork(); artwork.cancelPage()
+        generation++; cancelWork(); artwork.cancelPage(keepDisplayed=true)
     }
     private fun releaseCatalogViews() {
         nav.clear()
@@ -295,7 +297,7 @@ class MainActivity: Activity() {
 
     private fun pageScroll()=TvScrollView(this)
     private fun showCatalog(load: Boolean=false,focusNav: Boolean=false,focusType: Boolean=false) {
-        initialCatalogPending=false;restoreStoppedPage=false;pendingDetail=null
+        initialCatalogPending=false;restoreStoppedPage=false;pendingDetail=null;detailLoading=null
         invalidatePage();releaseCatalogViews();screen=Screen.CATALOG
         browser.show(root)
     }
@@ -403,7 +405,13 @@ class MainActivity: Activity() {
         playbackAttempt.clear(); favoriteMonitor.stop(); cancelDetailRefresh(); pendingDetailUpdate=null
         pendingDetail=series; detailAutoplay=autoplay; detailFromStart=fromStart
         browser.leave();invalidatePage(); releaseCatalogViews(); screen=Screen.DETAIL; directPlayback=resume; detail=null
-        val body=base(series.title); message(body,"正在加载剧集…")
+        val shell=browser.detailScaffold(root) { key,genre ->
+            detailLoading=null;invalidatePage();screen=Screen.CATALOG;browser.select(key,genre,keepNavigationFocus=true)
+        }
+        val loading=DetailLoadingView(this,series,::loadCover,::goBack)
+        detailLoading=loading;shell.body.addView(ScrollView(this).apply { isVerticalScrollBarEnabled=false;addView(loading) },lp(-1,-1))
+        shell.enterContent={ loading.backButton.requestFocus() }
+        FocusIntent.during(false) { loading.backButton.requestFocus() }
         work({ repository.detail(series.id) }, { result ->
             detail=result.copy(series=result.series.copy(contentType=series.contentType ?: result.series.contentType,
                 episodeCount=result.episodes.size,tagNames=series.tagNames.ifEmpty { result.series.tagNames })); detailUpdatedAt=android.os.SystemClock.elapsedRealtime(); detailAttemptedAt=null
@@ -414,7 +422,7 @@ class MainActivity: Activity() {
             if(resume && progress!=null && progress.episodeId !in result.episodes) {
                 directPlayback=false;Toast.makeText(this,"上次分集已不可用，请重新选集",Toast.LENGTH_LONG).show();showDetail(true)
             } else if(resume) playEpisode(target.index,target.position,autoplay=detailAutoplay) else showDetail(false)
-        }, { problem -> error(body,problem) { openDetail(series,resume,detailAutoplay,fromStart) } })
+        }, { problem -> loading.failed();error(loading.status,problem) { openDetail(series,resume,detailAutoplay,fromStart) } })
     }
     private fun cancelDetailRefresh() {
         detailRefreshScope?.cancel(); detailRefreshScope=null
@@ -465,9 +473,10 @@ class MainActivity: Activity() {
         val focusedTag=if(preservePosition) root.findFocus()?.tag else null
         val savedY=if(preservePosition) detailScroll?.scrollY else null
         invalidatePage(); releaseCatalogViews(); screen=Screen.DETAIL; val data=detail ?: return showCatalog()
-        val shell=browser.detailScaffold(root) { key,genre ->
+        val shell=browser.detailScaffold(root,animate=detailLoading==null && !preservePosition) { key,genre ->
             invalidatePage();releaseCatalogViews();screen=Screen.CATALOG;browser.select(key,genre,keepNavigationFocus=true)
         }
+        detailLoading=null
         val body=shell.body;body.setPadding(body.paddingLeft,dp(12),body.paddingRight,dp(12));nav.clear();nav.addAll(shell.navigation)
         saveStatusView=BrowseButton(this,"本机改动尚未保存 · 重试保存",BrowseButton.Role.TEXT) { library.flush() }.also {
             it.visibility=if(library.saveFailed) View.VISIBLE else View.GONE;body.addView(it)
@@ -540,8 +549,10 @@ class MainActivity: Activity() {
         (groupButtons+listOfNotNull(detailRefreshStatus,jump)).forEach { it.nextFocusUpId=header.actions.firstOrNull { it.tag==detailActionFocus[data.series.id] }?.id ?: play.id;it.nextFocusDownId=episodes.getOrNull(((detailEpisodeFocus["${data.series.id}:$group"] ?: episodeIndex)-group*20).coerceIn(0,(episodes.size-1).coerceAtLeast(0)))?.id ?: play.id }
         shell.enterContent={ play.requestFocus() }
         groupButtons.getOrNull(group)?.let { selected -> groupScroll.post { groupScroll.scrollTo(selected.left,0) } }
+        FocusIntent.during(false) {
         if(focusEpisode) episodes.getOrNull((episodeIndex-group*20).coerceIn(0,(episodes.size-1).coerceAtLeast(0)))?.requestFocus() ?: play.requestFocus() else play.requestFocus()
         if(focusedTag!=null) root.findViewWithTag<View>(focusedTag)?.takeIf { it.isFocusable && it.isShown }?.requestFocus()
+        }
         if(savedY!=null) { val ticket=generation;scroll.post { if(generation==ticket) scroll.scrollTo(0,savedY) } }
     }
     private fun playEpisode(index: Int,position: Long=0,autoplay: Boolean=true,recovering: Boolean=false,qualityOverride: Int?=null) {
@@ -557,6 +568,7 @@ class MainActivity: Activity() {
         val rejected=playbackAttempt.rejectedVariants()
         val prefetched=if(position==0L && !recovering && rejected.isEmpty()) preparedNext.take("$requestedId:$maxQuality") else null
         val claimedHttp=if(prefetched!=null) prefetchHttp.also { prefetchHttp=null } else null
+        val cover=artwork.preview(data.series.cover)
         saveProgress(); library.flush(); invalidatePage(); favoriteMonitor.stop(); releaseCatalogViews()
         if(reuse) {
             cancelRecovery(); cancelPrefetch(); tvTools.close()
@@ -599,9 +611,16 @@ class MainActivity: Activity() {
             controls=column().apply { setPadding(0,dp(12),0,0); visibility=View.GONE }; hud.addView(controls)
             root.addView(ScrollView(this).apply { isVerticalScrollBarEnabled=false; addView(hud) },FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM))
         }
+        clearPlaybackCover()
+        val coverContent=column().apply { gravity=Gravity.CENTER;setBackgroundColor(Color.BLACK);setPadding(dp(32),dp(24),dp(32),dp(24)) }
+        if(cover!=null) coverContent.addView(ImageView(this).apply { setImageDrawable(cover);scaleType=ImageView.ScaleType.FIT_CENTER;importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO },lp(dp(96),dp(144)))
+        coverContent.addView(text(data.series.title,22f).apply { gravity=Gravity.CENTER;maxLines=2 },lp(-1,-2))
+        coverContent.addView(text("正在准备第 ${selectedIndex+1} 集…",14f,muted).apply { gravity=Gravity.CENTER },lp(-1,-2))
+        playbackCover=coverContent;root.addView(coverContent,minOf(1,root.childCount),FrameLayout.LayoutParams(-1,-1))
+        coverContent.importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO
         playbackTitle.text=data.series.title; playbackEpisode?.text="第 ${episodeIndex+1} 集"
         playbackText.text="正在获取播放地址…"; progressBar.progress=0; progressBar.visibility=View.VISIBLE; hidePlaybackOverlay()
-        controls.removeAllViews(); controls.visibility=View.GONE; transportPlay=null; sleepButton=null
+        TvMotion.visible(controls,false,immediate=true);controls.removeAllViews(); transportPlay=null; sleepButton=null
         syncMediaSession()
         val ticket=generation
         work({ prefetched ?: RemoteVideo(repository.http,repository.stream(requestedId,maxQuality) { it.variantKey !in rejected && playbackAttempt.withinNetworkLimit(it) && decoderSupport.supports(it) },closeExecutor=networkCleanup).prepare() }, { remote ->
@@ -636,8 +655,9 @@ class MainActivity: Activity() {
                             return
                         }
                         playbackReady=true
+                        if(!requestedAutoplay) { clearPlaybackCover();if(episodePanel==null && !tvTools.showing && speedDialog==null) showPanel() }
                         if(firstReady) { firstReady=false; readySince=android.os.SystemClock.elapsedRealtime(); android.util.Log.i("HongguoTV","Playback ready episode=${episodeIndex+1} preloaded=${prefetched!=null} reused=$reuse elapsedMs=${readySince-playbackStarted}") }
-                        if(playError) updateFailureStatus() else if(hud.visibility==View.VISIBLE) updatePlaybackText()
+                        if(playError) updateFailureStatus() else if(TvMotion.isVisible(hud)) updatePlaybackText()
                     }
                     syncMediaSession()
                     if(state==Player.STATE_ENDED) {
@@ -650,11 +670,12 @@ class MainActivity: Activity() {
                 override fun onRenderedFirstFrame() {
                     if(active() && firstFrame) {
                         firstFrame=false
+                        clearPlaybackCover(animate=true)
                         Diagnostics.record("首帧","elapsedMs=${android.os.SystemClock.elapsedRealtime()-playbackStarted} quality=$quality")
                         android.util.Log.i("HongguoTV","Playback first frame episode=${episodeIndex+1} preloaded=${prefetched!=null} reused=$reuse elapsedMs=${android.os.SystemClock.elapsedRealtime()-playbackStarted}")
                     }
                 }
-                override fun onIsPlayingChanged(playing: Boolean) { if(active()) { if(hud.visibility==View.VISIBLE) showHud(); syncMediaSession() } }
+                override fun onIsPlayingChanged(playing: Boolean) { if(active()) { if(TvMotion.isVisible(hud)) showHud(); syncMediaSession() } }
                 override fun onPlaybackParametersChanged(parameters: PlaybackParameters) { if(active()) syncMediaSession() }
                 override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo,newPosition: Player.PositionInfo,reason: Int) { if(active()) syncMediaSession() }
                 override fun onPlayerError(error: PlaybackException) { if(active()) playerFailure(error) }
@@ -743,6 +764,9 @@ class MainActivity: Activity() {
         updateFailureStatus();main.postDelayed(retryRunnable,delay)
     }
     private fun playerFailure(problem: Throwable) {
+        clearPlaybackCover()
+        if(::hud.isInitialized) { TvMotion.visible(hud,false,immediate=true);TvMotion.visible(controls,false,immediate=true) }
+        playerHeading?.let { TvMotion.visible(it,true,immediate=true) }
         retryPosition=currentPosition().coerceAtLeast(0); retryAutoplay=requestedAutoplay && !sleepStopped
         saveProgress(); cancelRecovery(); cancelPrefetch()
         playError=true; player?.pause(); playerView?.visibility=View.GONE; progressBar.visibility=View.GONE; hud.visibility=View.GONE; playerHeading?.visibility=View.VISIBLE; controls.removeAllViews(); controls.visibility=View.GONE; panel=true
@@ -770,12 +794,12 @@ class MainActivity: Activity() {
     }
     private fun hidePlaybackOverlay() {
         main.removeCallbacks(hideHud)
-        panel=false; controls.visibility=View.GONE; controls.clearFocus(); hud.visibility=View.GONE; playerHeading?.visibility=View.GONE
+        panel=false; TvMotion.visible(controls,false);TvMotion.visible(hud,false);playerHeading?.let { TvMotion.visible(it,false) }
     }
     private fun showHud() {
-        if(screen!=Screen.PLAYER) return
+        if(screen!=Screen.PLAYER || !foreground) return
         if(playError) { updateFailureStatus();return }
-        hud.visibility=View.VISIBLE; playerHeading?.visibility=View.VISIBLE; updatePlaybackText(); main.removeCallbacks(hideHud)
+        TvMotion.visible(hud,true);playerHeading?.let { TvMotion.visible(it,true) }; updatePlaybackText(); main.removeCallbacks(hideHud)
         if(!panel && player?.isPlaying==true) main.postDelayed(hideHud,4500)
     }
     private fun updatePlaybackText() {
@@ -864,7 +888,8 @@ class MainActivity: Activity() {
     }
     private fun showPanel() {
         if(playError) return
-        panel=true; showHud(); controls.visibility=View.VISIBLE; controls.removeAllViews()
+        if(panel && TvMotion.isVisible(controls) && controls.childCount>0) { showHud();transportPlay?.requestFocus();return }
+        panel=true; showHud(); TvMotion.visible(controls,true); controls.removeAllViews()
         val transport=row(); controls.addView(transport)
         fun control(kind: TvGlyph.Kind,label: String,enabled: Boolean=true,click: ()->Unit)=iconButton(kind,label,action=click).apply {
             isEnabled=enabled; isFocusable=enabled; alpha=if(enabled) 1f else .3f; transport.addView(this,lp(dp(44),dp(44)).apply { rightMargin=dp(10) })
@@ -915,7 +940,7 @@ class MainActivity: Activity() {
             speedDialog=null
             if(anchor.isAttachedToWindow) { anchor.requestFocus(); if(inPlayer) showHud() }
         }
-        dialog.show(); TvDialogStyle.apply(dialog); dialog.listView.setSelection(selected); dialog.listView.requestFocus()
+        TvDialogStyle.show(dialog); dialog.listView.setSelection(selected); dialog.listView.requestFocus()
     }
     private fun showQualityPicker(anchor: TextView,inPlayer: Boolean) {
         val options=PlaybackQuality.options
@@ -927,7 +952,7 @@ class MainActivity: Activity() {
                 if(inPlayer && changed) { playbackAttempt.clear(); playEpisode(episodeIndex,currentPosition(),player?.playWhenReady ?: requestedAutoplay) }
             }.setNegativeButton("取消",null).create()
         dialog.setOnDismissListener { if(anchor.isAttachedToWindow) anchor.requestFocus() }
-        dialog.show(); TvDialogStyle.apply(dialog)
+        TvDialogStyle.show(dialog)
     }
     private fun showEpisodePanel(anchor: View) {
         if(episodePanel!=null) return
@@ -935,7 +960,7 @@ class MainActivity: Activity() {
         refreshDetail()
         val data=detail ?: return
         val ticket=generation
-        val overlayWasVisible=hud.visibility==View.VISIBLE
+        val overlayWasVisible=TvMotion.isVisible(hud)
         requestedAutoplay=player?.playWhenReady ?: requestedAutoplay
         player?.pause(); saveProgress()
         var resumeOnClose=true
@@ -955,13 +980,21 @@ class MainActivity: Activity() {
             })
         episodePanel=next; next.show()
     }
-    private fun hidePanel() { if(playError) return; panel=false; controls.visibility=View.GONE; controls.clearFocus(); showHud() }
+    private fun hidePanel() { if(playError) return; panel=false; TvMotion.visible(controls,false); showHud() }
     private fun formatTime(millis: Long): String { val seconds=(millis.coerceAtLeast(0)/1000); return "%02d:%02d".format(seconds/60,seconds%60) }
     private fun saveProgress(completed: Boolean=false) {
         val p=player ?: return; val data=detail ?: return; if(!playbackReady || episodeIndex !in data.episodes.indices) return
         library.save(WatchProgress(data.series,data.episodes[episodeIndex],episodeIndex,p.currentPosition.coerceAtLeast(0),p.duration.coerceAtLeast(0),completed || p.playbackState==Player.STATE_ENDED,System.currentTimeMillis()))
     }
+    private fun clearPlaybackCover(animate: Boolean=false) {
+        val cover=playbackCover ?: return
+        playbackCover=null
+        cover.animate().cancel()
+        if(animate && TvMotion.enabled()) cover.animate().alpha(0f).setDuration(100L).withEndAction { root.removeView(cover) }.start()
+        else root.removeView(cover)
+    }
     private fun releasePlayer() {
+        clearPlaybackCover()
         failureView?.let { root.removeView(it) };failureView=null
         cancelRecovery(); cancelPrefetch(); mediaSession.deactivate(); tvTools.close()
         val wasForeground=foreground; foreground=false
@@ -981,7 +1014,7 @@ class MainActivity: Activity() {
     private fun goBack() {
         if(!library.isLoaded) { finish(); return }
         when(screen) {
-            Screen.PLAYER -> if(hud.visibility==View.VISIBLE && !playError) hidePlaybackOverlay() else returnToDetail()
+            Screen.PLAYER -> if(TvMotion.isVisible(hud) && !playError) hidePlaybackOverlay() else returnToDetail()
             Screen.DETAIL -> showCatalog()
             else -> if(!browser.back()) finish()
         }
@@ -1069,6 +1102,8 @@ class MainActivity: Activity() {
         } else libraryLoadError?.let(::showLibraryError)
     }
     override fun onPause() {
+        browser.finishMotion();root.finish()
+        if(::hud.isInitialized) { TvMotion.settle(hud);TvMotion.settle(controls) };playerHeading?.let(TvMotion::settle)
         browser.pause();updater.pause(); cancelDetailRefresh()
         foreground=false; main.removeCallbacks(tick); cancelRecovery(); cancelPrefetch(); mediaSession.deactivate()
         sleepTimer.cancel(); favoriteMonitor.stop(); detailAutoplay=false; requestedAutoplay=false; pausedForLifecycle=true

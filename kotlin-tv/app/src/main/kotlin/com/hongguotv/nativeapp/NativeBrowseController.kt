@@ -17,7 +17,7 @@ import java.util.concurrent.Executors
 /** Owns browsing state, requests and phone lifetime; playback stays in MainActivity. */
 class NativeBrowseController(private val activity: Activity,private val repository: ContentRepository,private val library: Library,
     private val load: (ImageView,String)->Unit,private val open: (Series,Boolean)->Unit,private val actions: (Series,View)->Unit,
-    private val info: (String,String,View?)->Unit,private val settings: (LinearLayout,View)->Unit,private val routeChanged: (Int)->Unit,private val checkFavorites: ()->Unit,private val favoriteStatus: ()->String,private val clearHistory: (View)->Unit) {
+    private val info: (String,String,View?)->Unit,private val settings: (LinearLayout,View)->Unit,private val routeChanged: (Int)->Unit,private val checkFavorites: ()->Unit,private val favoriteStatus: ()->String,private val clearHistory: (View)->Unit,private val retireArtwork: ()->Unit={}) {
     private val ui=BrowseUi(activity)
     private val main=Handler(Looper.getMainLooper())
     private val workers=Executors.newFixedThreadPool(2)
@@ -36,6 +36,7 @@ class NativeBrowseController(private val activity: Activity,private val reposito
     private var content: LinearLayout?=null
     private var sidebar: View?=null
     private var scaffold: BrowseScaffold?=null
+    private var scaffoldConfiguration: android.content.res.Configuration?=null
     private var restoreContentFocus=true
     private var home: HomeScreen?=null
     private val homeRefresh=HomeRefreshState()
@@ -83,7 +84,7 @@ class NativeBrowseController(private val activity: Activity,private val reposito
     fun select(next: String,nextType: ContentType=type,keepNavigationFocus: Boolean=false) {
         val destinationType=if(next=="catalog") nextType else type
         if(active && route==next && type==destinationType) return
-        capture();stopJobs();closePhone();route=next;type=destinationType
+        capture();stopJobs();closePhone();retireArtwork();route=next;type=destinationType
         if(next=="catalog") library.contentType=type
         active=true;renderShell(keepNavigationFocus)
     }
@@ -112,10 +113,9 @@ class NativeBrowseController(private val activity: Activity,private val reposito
         val target=root ?: return
         home=null;catalogView=null;rankView=null;searchView=null;localGrid=null
         restoreContentFocus=!keepNavigationFocus
-        val shell=scaffold?.takeIf { it.parent===target } ?: BrowseScaffold(activity,route,type) { key,genre -> select(key,genre,keepNavigationFocus=true) }.also {
-            target.removeAllViews();target.addView(it,FrameLayout.LayoutParams(-1,-1));scaffold=it
-        }
-        shell.body.removeAllViews();shell.select(route,type)
+        val shell=ensureShell(target)
+        shell.navigateTo={ key,genre -> select(key,genre,keepNavigationFocus=true) }
+        shell.beginPage(direction=if(keepNavigationFocus) 1f else -1f);shell.select(route,type)
         sidebar=shell.selectedNav
         val body=shell.body;content=body
         shell.enterContent={ focusContent() }
@@ -131,16 +131,23 @@ class NativeBrowseController(private val activity: Activity,private val reposito
         }
         if(!keepNavigationFocus || shell.navigation.none { it.hasFocus() }) FocusIntent.during(false) { sidebar?.requestFocus() }
         // Restore content focus only when returning from a page that owned it.
-        main.post { if(active && !keepNavigationFocus) when(route) {
+        val restoreEpoch=epoch
+        main.post { if(active && restoreEpoch==epoch && !keepNavigationFocus) when(route) {
             "catalog" -> if(states.getValue(type).anchor.focus) catalogView?.grid?.submit(states.getValue(type).items.map { PosterGridView.Item(it) },states.getValue(type).anchor)
             "ranks" -> Unit
             "home" -> homePosition?.let { home?.restorePosition(it,it.focus.isNotBlank()) }
         } }
     }
-    internal fun detailScaffold(target: FrameLayout,navigate: (String,ContentType)->Unit): BrowseScaffold {
-        target.removeAllViews()
-        return BrowseScaffold(activity,route,type,navigate).also { target.addView(it,FrameLayout.LayoutParams(-1,-1)) }
+    private fun ensureShell(target: FrameLayout): BrowseScaffold = scaffold?.takeIf { it.parent===target && scaffoldConfiguration==activity.resources.configuration }
+        ?: BrowseScaffold(activity,route,type) { key,genre -> select(key,genre,keepNavigationFocus=true) }.also {
+            if(target is PageTransitionHost) target.replace(it) else { target.removeAllViews();target.addView(it,FrameLayout.LayoutParams(-1,-1)) }
+            scaffold=it;scaffoldConfiguration=android.content.res.Configuration(activity.resources.configuration)
+        }
+    internal fun detailScaffold(target: FrameLayout,animate: Boolean=true,navigate: (String,ContentType)->Unit): BrowseScaffold {
+        root=target
+        return ensureShell(target).also { it.navigateTo=navigate;it.beginPage(TvMotion.DETAIL,animate=animate) }
     }
+    fun finishMotion() { scaffold?.finishMotion() }
     private fun focusContent() {
         when(route) {
             "home" -> home?.focusContent()
@@ -313,7 +320,8 @@ class NativeBrowseController(private val activity: Activity,private val reposito
         val counts=mapOf(LibrarySection.FAVORITES to library.favorites().size,LibrarySection.LATER to library.later().size,LibrarySection.HISTORY to library.history().size)
         val tabs=LibrarySection.entries.map { item -> BrowseButton(activity,"${item.label}  ${counts.getValue(item)}",BrowseButton.Role.TAB,section==item) {
             if(section!=item) {
-                capture();section=item;body.removeAllViews();renderLibrary(body,focusTab=item);routeChanged(tab())
+                capture();section=item;retireArtwork();renderShell(keepNavigationFocus=true)
+                FocusIntent.during(false) { content?.findViewWithTag<View>("library:${item.name}")?.requestFocus() }
             }
         }.autoSelect().apply { tag="library:${item.name}" } }
         ui.line(body,tabs)

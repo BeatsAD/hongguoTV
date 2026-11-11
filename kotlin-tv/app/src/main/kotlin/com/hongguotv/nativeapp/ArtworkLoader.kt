@@ -74,9 +74,16 @@ class ArtworkLoader(context: Context) {
 
     init { repeat(if (lowRam) 1 else 2) { workers.execute(::work) } }
 
+    /** Copy the drawable wrapper, sharing only the decoded thumbnail bitmap until the first frame. */
+    internal fun preview(url: String): android.graphics.drawable.Drawable? {
+        val requestUrl=com.hongguotv.core.ArtworkUrl.forApi(url,android.os.Build.VERSION.SDK_INT)
+        return bindings.values.firstOrNull { it.url==requestUrl && it.view.get()?.drawable!=null }
+            ?.view?.get()?.drawable?.constantState?.newDrawable()
+    }
+
     /** Size defaults to the laid-out content bounds, including the detail page's portrait artwork. */
     fun load(view: ImageView, url: String, priority: Int = PRIORITY_VISIBLE, widthPx: Int = 0, heightPx: Int = 0) {
-        if (closed) return
+        if (closed || retired(view)) return
         val requestUrl=com.hongguotv.core.ArtworkUrl.forApi(url,android.os.Build.VERSION.SDK_INT)
         val previous = bindings[view]
         if (previous != null && previous.owner == owner && previous.url == requestUrl && previous.width == widthPx && previous.height == heightPx) {
@@ -86,6 +93,7 @@ class ArtworkLoader(context: Context) {
             return
         }
         if (previous != null) unbind(previous)
+        TvMotion.settle(view)
         view.setImageDrawable(null)
         if (requestUrl.isBlank()) return
         val binding = Binding(view, owner, requestUrl, priority.coerceIn(PRIORITY_FOCUSED, PRIORITY_PREFETCH), widthPx, heightPx)
@@ -100,9 +108,14 @@ class ArtworkLoader(context: Context) {
         request(binding)
     }
 
+    private fun retired(view: View): Boolean {
+        var item: View?=view
+        while(item!=null) { if(item.getTag(R.id.tv_motion_retired)==true) return true;item=item.parent as? View }
+        return false
+    }
     private fun request(binding: Binding) {
         val view = binding.view.get() ?: return
-        if (closed || binding.owner != owner || bindings[view] !== binding) return
+        if (closed || retired(view) || binding.owner != owner || bindings[view] !== binding) return
         val width = if (binding.width > 0) binding.width else view.width - view.paddingLeft - view.paddingRight
         val height = if (binding.height > 0) binding.height else view.height - view.paddingTop - view.paddingBottom
         if (width <= 0 || height <= 0) return
@@ -158,6 +171,7 @@ class ArtworkLoader(context: Context) {
 
     private fun unbind(binding: Binding) {
         binding.view.get()?.let { view ->
+            TvMotion.settle(view)
             view.removeOnLayoutChangeListener(binding.layout)
             view.removeOnAttachStateChangeListener(binding.attach)
             if (bindings[view] === binding) bindings.remove(view)
@@ -167,10 +181,13 @@ class ArtworkLoader(context: Context) {
     }
 
     /** Release every old-page listener and bitmap binding, including queued and in-flight requests. */
-    fun cancelPage(clearMemory: Boolean = false) {
+    fun cancelPage(clearMemory: Boolean = false, keepDisplayed: Boolean = false) {
         owner++
         val old = bindings.values.toList()
-        old.forEach { binding -> binding.view.get()?.setImageDrawable(null); unbind(binding) }
+        old.forEach { binding ->
+            binding.view.get()?.let { view -> TvMotion.settle(view);if(!keepDisplayed) view.setImageDrawable(null) }
+            unbind(binding)
+        }
         val cancelled = synchronized(signal) {
             jobs.values.toList().also { list -> list.forEach(::cancelLocked); signal.notifyAll() }
         }
@@ -223,7 +240,11 @@ class ArtworkLoader(context: Context) {
                     listeners.forEach { binding ->
                         val view = binding.view.get()
                         if (view != null && bindings[view] === binding && binding.key == job.key) {
-                            if (bitmap != null) { view.setImageBitmap(bitmap); binding.applied = job.key }
+                            if (bitmap != null) {
+                                val first=binding.applied==null
+                                view.setImageBitmap(bitmap); binding.applied = job.key
+                                if(first && view.isAttachedToWindow) TvMotion.appear(view,TvMotion.IMAGE)
+                            }
                             else binding.failed = job.key
                         }
                     }
