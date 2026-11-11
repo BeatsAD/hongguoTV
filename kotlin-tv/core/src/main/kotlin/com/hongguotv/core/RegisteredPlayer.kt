@@ -59,7 +59,7 @@ internal object RegisteredPlayer {
         return JSONObject().put("code",0).put("data",JSONObject().put(id,JSONObject().put("video_model",model))).toString()
     }
 
-    private fun resolveUrl(raw: String,seed: String): String? {
+    internal fun resolveUrl(raw: String,seed: String): String? {
         if(raw.isBlank()) return null
         fun valid(value: String)=cleanUrl(value).toHttpUrlOrNull()?.takeIf { it.username.isEmpty() && it.password.isEmpty() }?.toString()
         valid(raw)?.let { return it }
