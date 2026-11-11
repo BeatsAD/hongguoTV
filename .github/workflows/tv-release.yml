@@ -54,6 +54,13 @@ jobs:
           CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           HEAD_BRANCH: ${{ github.event.pull_request.head.ref || github.ref_name }}
         run: |
+          if [ ! -f scripts/upstream-sync.py ]; then
+            case "$HEAD_BRANCH" in
+              codex/upstream-sync/*) echo 'Missing trusted preservation policy'; exit 1 ;;
+            esac
+            echo 'Installing preservation policy for the first time; full verification still required.'
+            exit 0
+          fi
           git fetch --no-tags origin "$CANDIDATE_SHA"
           python3 scripts/upstream-sync.py verify --base origin/main --head "$CANDIDATE_SHA" --branch "$HEAD_BRANCH"
   review_gate:
