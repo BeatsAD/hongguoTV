@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
-    "axios": "1.13.6",
+    "axios": "1.20.0",
     "react": "19.1.0",
     "react-native": "npm:react-native-tvos@0.81.5-2",
     "react-native-video": "6.19.3"
@@ -32,10 +32,21 @@
     "@types/react": "^19.1.0",
     "prettier": "2.8.8",
     "tsx": "4.20.5",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "deepmerge": "file:vendor/deepmerge"
   },
   "engines": {
     "node": ">=22.0.0"
   },
-  "license": "GPL-3.0-only"
+  "license": "GPL-3.0-only",
+  "overrides": {
+    "follow-redirects": "1.16.2",
+    "shell-quote": "1.11.0",
+    "launch-editor": "2.14.2",
+    "fast-xml-parser": "5.12.0",
+    "qs": "6.16.1",
+    "body-parser": "1.20.9",
+    "joi": "17.13.9",
+    "deepmerge": "$deepmerge"
+  }
 }

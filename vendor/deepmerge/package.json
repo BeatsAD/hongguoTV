@@ -1,0 +1,9 @@
+{
+  "name": "deepmerge",
+  "version": "4.3.1-hongguo.1",
+  "description": "Local security patch of deepmerge 4.3.1 for CVE-2026-93753",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "license": "MIT",
+  "private": true
+}
