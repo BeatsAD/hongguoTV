@@ -180,6 +180,18 @@ class MergeTests(unittest.TestCase):
             notes = publisher.release_notes(config, record)
         self.assertEqual(name, publisher.release_metadata({"tag_name": tag, "body": notes})["versionName"])
 
+    def test_full_publisher_suite_works_under_the_generated_next_version(self):
+        spec = importlib.util.spec_from_file_location("publisher_tests", Path(__file__).with_name("test-tv-update.py"))
+        tests = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(tests)
+        next_channel = tests.update.channel() | {"versionName": "1.0.1"}
+        with patch.object(tests.update, "channel", return_value=next_channel):
+            result = unittest.TestResult()
+            unittest.defaultTestLoader.loadTestsFromModule(tests).run(result)
+        self.assertGreaterEqual(result.testsRun, 24)
+        self.assertEqual([], result.failures)
+        self.assertEqual([], result.errors)
+
     def test_unresolved_state_cannot_be_marked_as_synchronized(self):
         f = Fixture(b"old\n", b"ours\n", b"theirs\n")
         state, _, files = f.candidate()
