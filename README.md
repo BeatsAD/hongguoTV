@@ -1,8 +1,6 @@
 # 红果 TV
 
-本目录独立管理红果 TV 的代码、Git 历史和构建产物，与 Quiet TV 桌面项目分开。当前开发的是 **Kotlin 原生独立 APK**：安装后联网即可使用，最低 Android 8.0，支持电视遥控器操作。
-
-[原生版说明与构建](kotlin-tv/README.md)  [上游正式版下载](https://github.com/N3urda/hongguoTV-updates/releases/latest)（不包含此处尚未公开的本地定制）。
+当前开发的是 **Kotlin 原生独立 APK**：安装后联网即可使用，最低 Android 8.0，支持电视遥控器操作。
 
 本地测试版 `0.9.1` 保留播放接口修复及红果 TV 图标，补充资源兼容性筛选、有限解码恢复、保存失败反馈、手机输入连接超时和封面缓存修复。开发包使用 `com.hongguotv.nativeapp.playbackfix`，不接入上游正式更新渠道，覆盖同签名开发包保留本机记录。
 
