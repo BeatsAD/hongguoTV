@@ -114,6 +114,9 @@ def verify_badging(config, badging, certificate, code, name):
 def release_notes(config, record):
     path = ROOT / "kotlin-tv/distribution/notes" / (record["versionName"] + ".md")
     notes = path.read_text().strip()
+    title = f"# hongguo {record['versionName']}"
+    if notes.splitlines()[:1] == [title]:
+        notes = "\n".join(notes.splitlines()[1:]).lstrip()
     assert re.findall(r"^## (.+)$", notes, re.M) == ["新增功能", "问题修复"], "Release notes require the two user-facing sections"
     for section in re.split(r"^## .+$", notes, flags=re.M)[1:]:
         assert re.search(r"^- \S", section, re.M), "Each release-note section needs a change or an explicit none entry"
