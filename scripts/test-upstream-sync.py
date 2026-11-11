@@ -260,6 +260,36 @@ class ReviewTests(unittest.TestCase):
                 self.assertFalse(sync.activate_candidate_checks(unittest.mock.Mock(), CONFIG, pr | change))
                 api.assert_not_called()
 
+    def test_dispatch_checks_cannot_substitute_for_native_merge_checks(self):
+        pr, run = self.ci_proposal()
+        runs = [run | {"check_suite_id": 1}, run | {"event": "workflow_dispatch", "check_suite_id": 2}, run | {"head_sha": "old", "check_suite_id": 3}]
+        checks = [{"id": number, "check_suite": {"id": number}} for number in [1, 2, 3]]
+        with patch.object(sync, "api", side_effect=[{"workflow_runs": runs}, {"check_runs": checks}]):
+            self.assertEqual([checks[0]], sync.native_checks(CONFIG, pr))
+
+    def test_main_baseline_update_preserves_existing_candidate_and_pins_head(self):
+        pr, _ = self.ci_proposal()
+        repo = unittest.mock.Mock()
+        repo.ancestor.return_value = False
+        repo.git.side_effect = [None, "main-now", None, "main-before"]
+        with patch.object(sync, "fetch_upstream"), patch.object(sync, "verify_candidate") as verify, patch.object(sync, "api") as api, patch("builtins.print"):
+            self.assertTrue(sync.update_candidate_base(repo, CONFIG, pr))
+            verify.assert_called_once_with(repo, CONFIG, "main-before", "candidate", pr["head"]["ref"])
+            self.assertEqual(("repos/BeatsAD/hongguoTV/pulls/4/update-branch", "PUT", {"expected_head_sha": "candidate"}), api.call_args.args)
+
+    def test_updated_main_or_human_edits_do_not_overwrite_candidate(self):
+        pr, _ = self.ci_proposal()
+        repo = unittest.mock.Mock()
+        repo.ancestor.return_value = True
+        with patch.object(sync, "api") as api:
+            self.assertFalse(sync.update_candidate_base(repo, CONFIG, pr))
+            api.assert_not_called()
+        repo.ancestor.return_value = False
+        with patch.object(sync, "fetch_upstream"), patch.object(sync, "verify_candidate", side_effect=ValueError("human edit")), patch.object(sync, "api") as api:
+            with self.assertRaisesRegex(ValueError, "human edit"):
+                sync.update_candidate_base(repo, CONFIG, pr)
+            api.assert_not_called()
+
     def test_manual_development_pr_is_bot_authored_and_owner_requested(self):
         with patch('builtins.print'), patch.dict(os.environ, {'GITHUB_REPOSITORY':CONFIG['repository'],'GITHUB_ACTOR':'BeatsAD'}), patch.object(sync, 'api', side_effect=[{'commit':{'sha':'candidate'}},[],{'html_url':'https://github.com/BeatsAD/hongguoTV/pull/7'},{'workflow_runs':[]},None]) as api:
             sync.propose_local(CONFIG, 'codex/manual-migration')
