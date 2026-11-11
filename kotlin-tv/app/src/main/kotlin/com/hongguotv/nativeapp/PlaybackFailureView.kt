@@ -21,7 +21,7 @@ internal class PlaybackFailureView(context: Context,private val retry: ()->Unit,
         addView(actions,LayoutParams(-2,-2).apply { topMargin=ui.dp(BrowseLayout.FAILURE_CONTENT_GAP) })
     }
     fun show(message: String,automatic: Boolean,canLower: Boolean) {
-        status.text=message
+        if(status.text.toString()!=message) status.text=message
         val next=automatic to canLower
         if(mode==next) return
         val focused=if(mode?.first==automatic) actions.focusedChild?.tag else null

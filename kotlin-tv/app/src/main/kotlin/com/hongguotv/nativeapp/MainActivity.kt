@@ -745,7 +745,7 @@ class MainActivity: Activity() {
     private fun playerFailure(problem: Throwable) {
         retryPosition=currentPosition().coerceAtLeast(0); retryAutoplay=requestedAutoplay && !sleepStopped
         saveProgress(); cancelRecovery(); cancelPrefetch()
-        playError=true; player?.pause(); progressBar.visibility=View.GONE; hud.visibility=View.GONE; playerHeading?.visibility=View.VISIBLE; controls.removeAllViews(); controls.visibility=View.GONE; panel=true
+        playError=true; player?.pause(); playerView?.visibility=View.GONE; progressBar.visibility=View.GONE; hud.visibility=View.GONE; playerHeading?.visibility=View.VISIBLE; controls.removeAllViews(); controls.visibility=View.GONE; panel=true
         val decoding=problem is PlaybackException && problem.errorCode in 4000..4999
         if(decoding && playbackAttempt.rejectDecoder(video?.info)) {
             playEpisode(episodeIndex,retryPosition,retryAutoplay,recovering=true)
