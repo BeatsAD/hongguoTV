@@ -1,0 +1,4 @@
+<resources>
+    <item name="tv_motion_state" type="id" />
+    <item name="tv_motion_retired" type="id" />
+</resources>

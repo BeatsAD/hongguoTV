@@ -59,19 +59,52 @@ internal class TvControlDrawable(context: Context,private val primary: Boolean=f
     private val unit=context.resources.displayMetrics.density
     private val paint=Paint(Paint.ANTI_ALIAS_FLAG)
     override fun isStateful()=true
-    override fun onStateChange(state: IntArray): Boolean { invalidateSelf();return true }
+    private var stateAnimator: android.animation.ValueAnimator?=null
+    private var drawn=false
+    private var fillColor=fill ?: idleColor ?: TvStyle.surface
+    private var pressedAmount=0f
+    private fun colorFor(state: IntArray): Int {
+        val enabled=outlineOnly || forceFocus || state.contains(android.R.attr.state_enabled)
+        val selected=state.contains(android.R.attr.state_selected) || state.contains(android.R.attr.state_checked)
+        val focused=state.contains(android.R.attr.state_window_focused) && (forceFocus || state.contains(android.R.attr.state_focused))
+        return fill ?: when { !enabled->TvStyle.subtle;episode && selected->TvStyle.current;primary->TvStyle.primary;focused->TvStyle.raised;selected->TvStyle.selected;else->idleColor ?: if(quiet) TvStyle.subtle else TvStyle.surface }
+    }
+    override fun onStateChange(state: IntArray): Boolean {
+        val next=colorFor(state)
+        val pressed=if(state.contains(android.R.attr.state_pressed) && state.contains(android.R.attr.state_enabled)) 1f else 0f
+        stateAnimator?.cancel()
+        if(drawn && !outlineOnly && callback!=null && TvMotion.enabled() && (next!=fillColor || pressed!=pressedAmount)) {
+            val from=fillColor;val fromPress=pressedAmount
+            stateAnimator=android.animation.ValueAnimator.ofFloat(0f,1f).apply {
+                duration=if(pressed>0) 60L else 120L
+                addUpdateListener {
+                    val progress=it.animatedValue as Float
+                    fillColor=androidx.core.graphics.ColorUtils.blendARGB(from,next,progress)
+                    pressedAmount=fromPress+(pressed-fromPress)*progress
+                    invalidateSelf()
+                }
+                start()
+            }
+        } else { fillColor=next;pressedAmount=pressed }
+        invalidateSelf();return true
+    }
+    override fun setVisible(visible: Boolean,restart: Boolean): Boolean {
+        if(!visible) { stateAnimator?.cancel();fillColor=colorFor(state);pressedAmount=if(state.contains(android.R.attr.state_pressed)) 1f else 0f }
+        return super.setVisible(visible,restart)
+    }
     override fun draw(canvas: Canvas) {
+        if(!drawn) { fillColor=colorFor(state);drawn=true }
         val focused=state.contains(android.R.attr.state_window_focused) && (forceFocus || state.contains(android.R.attr.state_focused))
         val enabled=outlineOnly || forceFocus || state.contains(android.R.attr.state_enabled)
         val selected=state.contains(android.R.attr.state_selected) || state.contains(android.R.attr.state_checked)
         val box=RectF(bounds);val r=radius*unit
         if(!outlineOnly) {
             paint.style=Paint.Style.FILL
-            paint.color=fill ?: when { !enabled->TvStyle.subtle;episode && selected->TvStyle.current;primary->TvStyle.primary;focused->TvStyle.raised;selected->TvStyle.selected;else->idleColor ?: if(quiet) TvStyle.subtle else TvStyle.surface }
+            paint.color=fillColor
             paint.shader=if(primary && enabled) LinearGradient(box.left,box.top,box.right,box.top,TvStyle.primary,TvStyle.primaryEnd,Shader.TileMode.CLAMP) else null
             canvas.drawRoundRect(box,r,r,paint);paint.shader=null
             if(episode && selected) { paint.style=Paint.Style.STROKE;paint.strokeWidth=unit;paint.color=TvStyle.currentOutline;box.inset(unit/2,unit/2);canvas.drawRoundRect(box,r,r,paint);box.inset(-unit/2,-unit/2) }
-            if(enabled && state.contains(android.R.attr.state_pressed)) { paint.style=Paint.Style.FILL;paint.color=0x14000000;canvas.drawRoundRect(box,r,r,paint) }
+            if(enabled && pressedAmount>0f) { paint.style=Paint.Style.FILL;paint.color=Color.argb((20*pressedAmount).toInt(),0,0,0);canvas.drawRoundRect(box,r,r,paint) }
         }
         if(focused && enabled) {
             box.inset(3.5f*unit,3.5f*unit);paint.style=Paint.Style.STROKE;paint.strokeWidth=7*unit;paint.color=TvStyle.background

@@ -32,7 +32,12 @@ class EpisodePanel(
     fun show() {
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
         dialog.setOnDismissListener { closed() }
-        render(); dialog.show()
+        render()
+        dialog.window?.apply {
+            setWindowAnimations(if(!TvMotion.enabled()) 0 else if(TvMotion.spatial(activity)) R.style.TvPanelMotion else R.style.TvFadeMotion)
+            setGravity(Gravity.END or Gravity.CENTER_VERTICAL)
+        }
+        dialog.show()
         dialog.window?.apply {
             setBackgroundDrawableResource(android.R.color.transparent)
             setGravity(Gravity.END or Gravity.CENTER_VERTICAL)

@@ -16,7 +16,7 @@ class HomeScreen(context: Context,private val top: View,private val loadCover: (
     data class Entry(val series: Series,val label: String,val resume: Boolean=false,val progress: Int?=null)
     data class Shelf(val key: String,val title: String,val entries: List<Entry>,val status: String="",val more: (() -> Unit)?=null)
     data class Position(val focus: String,val shelf: String?,val column: Int,val row: Int,val vertical: Int,val horizontal: Map<String,Int>)
-    private data class Row(val key: String,val block: LinearLayout,val horizontal: HorizontalScrollView,val cards: List<PosterCardView>,val entries: List<Entry>,val all: View,val indicator: TextView,val previous: View,val next: View,val status: TextView)
+    private data class Row(val key: String,val block: LinearLayout,val horizontal: HorizontalScrollView,val cards: MutableList<PosterCardView>,var entries: List<Entry>,val all: View,val indicator: TextView,val previous: View,val next: View,val status: TextView)
     private val ui=BrowseUi(context)
     private val scroll=TvScrollView(context)
     private val contents=ui.column()
@@ -43,23 +43,48 @@ class HomeScreen(context: Context,private val top: View,private val loadCover: (
         return Position(key,row?.key,row?.cards?.indexOfFirst { it.tag==key }?.coerceAtLeast(0) ?: 0,r,scroll.scrollY,rows.associate { it.key to it.horizontal.scrollX })
     }
     fun render(shelves: List<Shelf>,focus: String,requestFocus: Boolean,position: Position?=null) {
+        val previousShelves=this.shelves.associateBy { it.key }
         this.shelves=shelves
         val ticket=++revision
         val anchorTicket=positionRevision
-        contents.removeAllViews();rows.clear();requestedArtwork.clear()
-        shelves.filter { it.entries.isNotEmpty() || it.more!=null }.forEach { shelf ->
+        val oldRows=rows.associateBy { it.key }
+        val shown=shelves.filter { it.entries.isNotEmpty() || it.more!=null }
+        oldRows.values.filter { row -> shown.none { it.key==row.key } }.forEach { row ->
+            contents.removeView(row.block);requestedArtwork.removeAll(row.cards.map { it.image }.toSet())
+        }
+        rows.clear()
+        fun createCard(key: String,entry: Entry)=PosterCardView(context).apply {
+            tag="$key:${entry.series.id}";bind(entry.series,entry.label,entry.progress?.div(100f))
+        }
+        shown.forEach { shelf ->
+            val old=oldRows[shelf.key]
+            if(old!=null && previousShelves[shelf.key]?.title==shelf.title && old.entries.size<=shelf.entries.size && old.entries==shelf.entries.take(old.entries.size)) {
+                val line=old.horizontal.getChildAt(0) as LinearLayout
+                old.cards.lastOrNull()?.let { card -> card.layoutParams=card.layoutParams.apply { (this as LayoutParams).rightMargin=ui.dp(12) } }
+                shelf.entries.drop(old.entries.size).forEach { entry ->
+                    val card=createCard(shelf.key,entry);old.cards+=card
+                    line.addView(card,LayoutParams(ui.dp(85),-2).apply { rightMargin=ui.dp(12) })
+                }
+                old.cards.lastOrNull()?.let { card -> card.layoutParams=card.layoutParams.apply { (this as LayoutParams).rightMargin=0 } }
+                old.entries=shelf.entries;old.status.text=shelf.status;old.status.visibility=if(shelf.status.isBlank()) GONE else VISIBLE
+                if(contents.indexOfChild(old.block)!=rows.size) {
+                    contents.removeView(old.block);contents.addView(old.block,rows.size)
+                    requestedArtwork.removeAll(old.cards.map { it.image }.toSet())
+                }
+                rows+=old
+                return@forEach
+            }
+            if(old!=null) { contents.removeView(old.block);requestedArtwork.removeAll(old.cards.map { it.image }.toSet()) }
+
             val block=ui.column(); val heading=ui.row()
             heading.addView(ui.text(shelf.title,18f).apply { typeface=android.graphics.Typeface.create("sans-serif-medium",android.graphics.Typeface.NORMAL) },LayoutParams(0,-2,1f))
             val horizontal=HorizontalScrollView(context).apply {
                 isHorizontalScrollBarEnabled=false;clipToPadding=false
+                val inset=ui.dp(TvMotion.POSTER_INSET_DP);setPadding(inset,inset,inset,inset)
                 setOnScrollChangeListener { _,_,_,_,_->scheduleArtwork() }
             }
             val line=ui.row().apply { gravity=android.view.Gravity.TOP };horizontal.addView(line)
-            val cards=shelf.entries.map { entry -> PosterCardView(context).apply {
-                tag="${shelf.key}:${entry.series.id}";bind(entry.series,entry.label,entry.progress?.div(100f))
-                setOnClickListener { remember(tag.toString());open(entry.series,entry.resume) }
-                setOnLongClickListener { actions(entry.series,this);true }
-            } }
+            val cards=shelf.entries.map { entry -> createCard(shelf.key,entry) }.toMutableList()
             val indicator=ui.text("",10f,TvStyle.muted)
             fun page(direction: Int) {
                 val count=TvStyle.homeColumns(context)
@@ -76,14 +101,15 @@ class HomeScreen(context: Context,private val top: View,private val loadCover: (
             block.addView(status)
             block.addView(horizontal)
             cards.forEachIndexed { index,card -> line.addView(card,LayoutParams(ui.dp(85),-2).apply { rightMargin=if(index==cards.lastIndex) 0 else ui.dp(12) }) }
-            contents.addView(block,LayoutParams(-1,-2).apply { bottomMargin=ui.dp(15) });rows+=Row(shelf.key,block,horizontal,cards,shelf.entries,all,indicator,previous,next,status)
+            contents.addView(block,rows.size,LayoutParams(-1,-2).apply { bottomMargin=ui.dp(15) });rows+=Row(shelf.key,block,horizontal,cards,shelf.entries,all,indicator,previous,next,status)
         }
         rows.forEachIndexed { i,row ->
             row.all.nextFocusLeftId=top.id;row.all.nextFocusDownId=row.cards.firstOrNull()?.id ?: row.all.id
             listOf(row.previous,row.next,row.all).forEach { it.nextFocusUpId=header?.refresh?.id ?: top.id }
             row.cards.forEachIndexed { j,card ->
+                card.setOnClickListener { remember(card.tag.toString());open(row.entries[j].series,row.entries[j].resume) }
+                card.setOnLongClickListener { actions(row.entries[j].series,card);true }
                 card.setOnFocusChangeListener { _,focused ->
-                    card.getChildAt(0).foreground=TvStyle.card(context,focused)
                     if(focused) { updateTools(row,j);lastFocus=card.tag.toString();remember(lastFocus);selected(row.entries[j].series,row.entries[j].label);loadCover(card.image,row.entries[j].series.cover);requestedArtwork+=card.image;scheduleArtwork();if(j>=row.cards.size-3 && !restoringFocus) nearEnd(row.key) }
                 }
                 card.setOnKeyListener { _,code,event ->
@@ -138,8 +164,8 @@ class HomeScreen(context: Context,private val top: View,private val loadCover: (
     }
     private fun fit() {
         if(width<=0) return
-        val count=TvStyle.homeColumns(context);val w=(width-ui.dp(12)*(count-1))/count
-        rows.forEach { row -> row.cards.forEach { it.maxPosterHeight=(scroll.height-ui.dp(48)-(ui.dp(42)*resources.configuration.fontScale).toInt()).coerceAtLeast(ui.dp(100));it.layoutParams=it.layoutParams.apply { width=w } };updateTools(row,row.cards.indexOfFirst { it.hasFocus() }.coerceAtLeast(0)) }
+        val count=TvStyle.homeColumns(context);val w=(width-ui.dp(TvMotion.POSTER_INSET_DP*2)-ui.dp(12)*(count-1))/count
+        rows.forEach { row -> row.cards.forEach { it.maxPosterHeight=(scroll.height-ui.dp(48+TvMotion.POSTER_INSET_DP*2)-(ui.dp(42)*resources.configuration.fontScale).toInt()).coerceAtLeast(ui.dp(100));it.layoutParams=it.layoutParams.apply { width=w } };updateTools(row,row.cards.indexOfFirst { it.hasFocus() }.coerceAtLeast(0)) }
     }
     private fun updateTools(row: Row,index: Int) {
         val count=TvStyle.homeColumns(context)
