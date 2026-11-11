@@ -2,7 +2,7 @@
 
 以下保留早期 v0.1.1 的使用、部署和构建说明，仅适用于根目录的 React Native / Node 工程。当前 Kotlin 原生版安装一个 APK 即可使用，无需部署这些服务；请先阅读[仓库首页](../README.md)。下文的“当前功能”“首版”和版本号均指历史版本，所有命令均从仓库根目录执行。
 
-用于自家电视的非官方红果短剧客户端。首版采用 **React Native TV + TypeScript**，最低 Android 8.0（API 26）。电视负责界面和播放，独立 Node 服务负责内容接入与媒体分段处理，便于后续其他平台复用。
+用于自家电视的非官方 hongguo 短剧客户端。首版采用 **React Native TV + TypeScript**，最低 Android 8.0（API 26）。电视负责界面和播放，独立 Node 服务负责内容接入与媒体分段处理，便于后续其他平台复用。
 
 **下载：[v0.1.1 APK、源码及 Docker 部署包](https://github.com/N3urda/hongguoTV/releases/tag/v0.1.1)** · [Docker 部署指南](DOCKER.md)
 
@@ -84,6 +84,6 @@ npm run build:android
 
 ## 来源与许可证
 
-项目与红果官方无关联。内容接口为非官方实现，平台变化可能导致失效；错误会明确显示，不会替换为虚假内容。
+项目与 hongguo 官方无关联。内容接口为非官方实现，平台变化可能导致失效；错误会明确显示，不会替换为虚假内容。
 
 Node 服务使用固定提交的 `drpys` 源，保留原文件、GPL-3.0 许可证和来源记录，见 [第三方说明](../server/vendor/NOTICE.md)。Android / tvOS 工程骨架源于 MIT 许可的 RN TV 模板。本项目代码按 [GPL-3.0](../LICENSE) 提供，第三方部分保留各自许可。

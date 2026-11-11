@@ -1,6 +1,7 @@
 # Third-party source
 
-`hongguo.cjs` is an unmodified copy of `spider/js/红果果[短].js` from
+`hongguo.cjs` is an unmodified copy of the source file at the URL-encoded path
+`spider/js/%E7%BA%A2%E6%9E%9C%E6%9E%9C%5B%E7%9F%AD%5D.js` from
 https://github.com/woshishiq1/drpys/tree/22261adfa31435e3b3ef5a730b8a2a75bcaf1715
 retrieved on 2026-09-21. Upstream license: GPL-3.0; see LICENSE.drpys.
 The filename was changed for local loading. The original header and comments remain.
