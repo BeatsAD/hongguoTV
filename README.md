@@ -98,7 +98,7 @@ U 盘安装、ADB 示例、备份恢复与常见问题见[中文安装与使用�
 ## 参与贡献与安全
 
 - 普通问题使用 [Bug 反馈表单](https://github.com/BeatsAD/hongguoTV/issues/new?template=bug_report.yml)，功能需求使用[功能建议表单](https://github.com/BeatsAD/hongguoTV/issues/new?template=feature_request.yml)。提交前请搜索已有反馈，移除截图与日志中的私人数据。
-- 疑似漏洞通过[私密漏洞报告](https://github.com/BeatsAD/hongguoTV/security/advisories/new)提交，不要先在公开 Issue 或 PR 中披露密钥、设备身份、签名播放地址或漏洞细节。
+- 疑似漏洞请先阅读[安全政策](SECURITY.md)，通过[私密漏洞报告](https://github.com/BeatsAD/hongguoTV/security/advisories/new)提交，不要先在公开 Issue 或 PR 中披露密钥、设备身份、签名播放地址或漏洞细节。
 - 贡献代码前阅读[贡献指南](CONTRIBUTING.md)，PR 请说明问题、最终行为、验证结果与兼容性影响。
 - 仓库已启用依赖安全提醒和 `main` 保护；配置边界见[仓库协作与安全设置](docs/REPOSITORY.zh-CN.md)。提醒与分支保护不能替代测试和安全审查。
 
@@ -112,6 +112,7 @@ U 盘安装、ADB 示例、备份恢复与常见问题见[中文安装与使用�
 - [账号同步调查与现阶段边界](docs/ACCOUNT_SYNC.md)
 - [React Native 版历史使用、部署与构建说明](docs/REACT_NATIVE_LEGACY.md)
 - [贡献指南与 PR 约定](CONTRIBUTING.md)
+- [安全政策与漏洞报告](SECURITY.md)
 - [许可证中文说明与 MIT 适用范围](docs/LICENSING.zh-CN.md)
 
 ## 来源与许可证

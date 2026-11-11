@@ -6,7 +6,7 @@
 
 - 普通问题使用 [Bug 反馈模板](https://github.com/BeatsAD/hongguoTV/issues/new?template=bug_report.yml)，提供应用版本、构建号、设备、Android 版本与复现步骤。
 - 功能建议使用[功能建议模板](https://github.com/BeatsAD/hongguoTV/issues/new?template=feature_request.yml)，说明要解决的问题、遥控器使用方式和兼容性要求。
-- 安全漏洞使用[私密报告入口](https://github.com/BeatsAD/hongguoTV/security/advisories/new)，不要先公开漏洞细节、密钥、设备身份或私人数据。
+- 安全漏洞请先阅读[安全政策](SECURITY.md)，使用[私密报告入口](https://github.com/BeatsAD/hongguoTV/security/advisories/new)，不要先公开漏洞细节、密钥、设备身份或私人数据。
 
 ## 开发约定
 

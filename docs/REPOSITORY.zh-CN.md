@@ -24,6 +24,6 @@
 
 ## 私密漏洞报告
 
-已开启[私密漏洞报告](https://github.com/BeatsAD/hongguoTV/security/advisories/new)。请先私密沟通，再协调修复与公开披露；不要把密钥、Cookie、签名播放地址、设备身份或私人备份写进公开 Issue。
+已开启[私密漏洞报告](https://github.com/BeatsAD/hongguoTV/security/advisories/new)。报告材料、维护范围与安全要求见[安全政策](../SECURITY.md)。请先私密沟通，再协调修复与公开披露；不要把密钥、Cookie、签名播放地址、设备身份或私人备份写进公开 Issue。
 
 [返回首页](../README.md) · [贡献指南](../CONTRIBUTING.md)
