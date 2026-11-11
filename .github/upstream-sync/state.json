@@ -1,8 +1,8 @@
 {
   "schema": 1,
-  "observed": "eea73e6a45569a2cbbb9440f7cd5290c459b0b70",
+  "observed": "7444bb01aec7b0420740103e551c45f1f66101c9",
   "files": {
-    "kotlin-tv/core/src/main/kotlin/com/hongguotv/core/Bytes.kt": "eea73e6a45569a2cbbb9440f7cd5290c459b0b70",
+    "kotlin-tv/core/src/main/kotlin/com/hongguotv/core/Bytes.kt": "7444bb01aec7b0420740103e551c45f1f66101c9",
     "kotlin-tv/core/src/main/kotlin/com/hongguotv/core/ContentRepository.kt": "eea73e6a45569a2cbbb9440f7cd5290c459b0b70",
     "kotlin-tv/core/src/main/kotlin/com/hongguotv/core/DeviceRegister.kt": "eea73e6a45569a2cbbb9440f7cd5290c459b0b70",
     "kotlin-tv/core/src/main/kotlin/com/hongguotv/core/MediaCrypto.kt": "eea73e6a45569a2cbbb9440f7cd5290c459b0b70",
@@ -11,5 +11,34 @@
     "kotlin-tv/core/src/main/kotlin/com/hongguotv/core/RequestScope.kt": "eea73e6a45569a2cbbb9440f7cd5290c459b0b70",
     "kotlin-tv/core/src/main/kotlin/com/hongguotv/core/Signer.kt": "eea73e6a45569a2cbbb9440f7cd5290c459b0b70"
   },
-  "unresolved": {}
+  "unresolved": {
+    "kotlin-tv/core/src/main/kotlin/com/hongguotv/core/ContentRepository.kt": {
+      "upstream": "7444bb01aec7b0420740103e551c45f1f66101c9",
+      "reason": "overlapping-changes"
+    },
+    "kotlin-tv/core/src/main/kotlin/com/hongguotv/core/DeviceRegister.kt": {
+      "upstream": "7444bb01aec7b0420740103e551c45f1f66101c9",
+      "reason": "added-on-both-sides"
+    },
+    "kotlin-tv/core/src/main/kotlin/com/hongguotv/core/MediaCrypto.kt": {
+      "upstream": "7444bb01aec7b0420740103e551c45f1f66101c9",
+      "reason": "overlapping-changes"
+    },
+    "kotlin-tv/core/src/main/kotlin/com/hongguotv/core/PlaybackDeviceSession.kt": {
+      "upstream": "7444bb01aec7b0420740103e551c45f1f66101c9",
+      "reason": "added-on-both-sides"
+    },
+    "kotlin-tv/core/src/main/kotlin/com/hongguotv/core/RemoteVideo.kt": {
+      "upstream": "7444bb01aec7b0420740103e551c45f1f66101c9",
+      "reason": "overlapping-changes"
+    },
+    "kotlin-tv/core/src/main/kotlin/com/hongguotv/core/RequestScope.kt": {
+      "upstream": "7444bb01aec7b0420740103e551c45f1f66101c9",
+      "reason": "overlapping-changes"
+    },
+    "kotlin-tv/core/src/main/kotlin/com/hongguotv/core/Signer.kt": {
+      "upstream": "7444bb01aec7b0420740103e551c45f1f66101c9",
+      "reason": "overlapping-changes"
+    }
+  }
 }
