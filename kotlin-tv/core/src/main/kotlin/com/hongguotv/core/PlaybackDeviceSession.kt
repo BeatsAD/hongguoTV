@@ -25,6 +25,7 @@ class PlaybackDeviceSession(private val clock: ()->Long=System::currentTimeMilli
     private var retryAt=0L
     // Playback-only routing hint. Never replaces the stored anonymous identity or cookies.
     @Volatile internal var compatibilityPlayback=false
+    @Volatile internal var compatibilityRoute=RegisteredPlayer.Route.SINGLE
     var changed: ((String)->Unit)?=null
 
     /** A separate app identity for the upstream shortplay compatibility endpoint. Never rotates on failure. */

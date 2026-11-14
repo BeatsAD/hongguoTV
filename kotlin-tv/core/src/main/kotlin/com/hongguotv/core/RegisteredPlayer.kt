@@ -6,10 +6,26 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** The upstream's registered single-episode API; separate from catalog/search identity. */
+/** Registered single/batch playback routes; separate from catalog/search identity. */
 internal object RegisteredPlayer {
-    fun request(id: String,device: PlayerDevice): Signer.Request {
+    enum class Route { SINGLE, BATCH, PRELOAD }
+
+    fun request(id: String,device: PlayerDevice): Signer.Request = request(id,device,Route.SINGLE)
+
+    fun request(id: String,device: PlayerDevice,route: Route): Signer.Request {
         require(id.matches(Regex("[0-9]{1,30}")))
+        if(route!=Route.SINGLE) {
+            val query=Signer.encode(VendorConstants.device+mapOf("iid" to device.installId,"device_id" to device.deviceId))
+            val body=JSONObject().put("biz_param",JSONObject().put("detail_page_version",0).put("device_level",3)
+                .put("disable_digg_stat",false).put("need_all_video_definition",true).put("need_mp4_align",false)
+                .put("use_os_player",false).put("use_server_dns",false).put("video_platform",1024))
+                .put("mixed_video_id_map",JSONObject().put("1004",JSONArray().put(id))).toString().toByteArray()
+            val path=if(route==Route.PRELOAD) "multi_video_model/preload" else "multi_video_model"
+            return Signer.Request("https://api5-normal-sinfonlineb.fqnovel.com/novel/player/$path/v1/?$query",
+                PlayerSigner.headers(query,body)+mapOf("User-Agent" to VendorConstants.VIDEO_UA,
+                    "Accept" to "application/json; charset=utf-8,application/x-protobuf",
+                    "Content-Type" to "application/json","x-xs-from-web" to "0","sdk-version" to "2"),body)
+        }
         val query=Signer.encode(linkedMapOf("iid" to device.installId,"device_id" to device.deviceId,
             "aid" to "1967","app_name" to "novelapp","version_code" to "72132","version_name" to "7.2.1.32",
             "device_platform" to "android","device_brand" to "Xiaomi","os_version" to "13","cdid" to device.cdid))
@@ -30,6 +46,7 @@ internal object RegisteredPlayer {
         val code=root.optInt("code",root.optInt("Code",0))
         if(code!=0) throw PlaybackSourceException(PlaybackFailureKind.SOURCE,"兼容播放接口暂不可用（错误码 $code）")
         val data=root.optJSONObject("data") ?: throw EmptyContentException("兼容播放信息为空")
+        if(data.length()==0) throw EmptyContentException("兼容播放信息为空")
         val entry=data.optJSONObject(id) ?: data.takeIf { it.has("video_model") }
             ?: throw PlaybackSourceException(PlaybackFailureKind.FORMAT,"兼容播放信息没有对应剧集")
         val model=when(val raw=entry.opt("video_model")) {
