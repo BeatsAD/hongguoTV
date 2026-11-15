@@ -34,15 +34,16 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
     private data class SearchCursor(val searchId: String, val passback: String, val offset: Int?, val updatedAt: Long, val source: SearchSource = SearchSource.APP, val websitePage: Int = 0)
     private val searchCursors=linkedMapOf<Triple<ContentType,String,Int>,SearchCursor>()
     @Volatile private var appSearchRetryAt = 0L
-    internal fun text(url: String, signed: Signer.Request? = null, timeoutMillis: Long? = null, metadata: Boolean = true): String {
+    internal fun text(url: String, signed: Signer.Request? = null, timeoutMillis: Long? = null, metadata: Boolean = true, anonymous: Boolean = false): String {
         val request = Request.Builder().url(url).header("User-Agent",VendorConstants.VIDEO_UA).header("Accept-Language","zh-CN,zh;q=0.9")
         signed?.headers?.forEach { (k,v) -> request.header(k,v) }
         signed?.body?.let { request.post(it.toRequestBody("application/json; charset=utf-8".toMediaType())) }
-        val call=http.newCall(request.build())
+        val transport=if(anonymous) http.newBuilder().cookieJar(okhttp3.CookieJar.NO_COOKIES).build() else http
+        val call=transport.newCall(request.build())
         timeoutMillis?.let { call.timeout().timeout(it,TimeUnit.MILLISECONDS) }
         val host=call.request().url.host
         val stage=when {
-            url.contains("/multi_video_model/") -> "播放取址"
+            url.contains("/multi_video_model/") || url.contains("/video_model/") -> "播放取址"
             url.contains("/search/") -> "搜索请求"
             url.contains("/detail?") -> "剧集详情"
             metadata -> "内容请求"
@@ -198,32 +199,42 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
         if(episodes.isEmpty() || episodes.any { !it.matches(Regex("[0-9]{1,30}")) } || episodes.distinct().size!=episodes.size) throw ContentProtocolException("分集数据异常")
         return Detail(card(o).copy(id=id,episodeCount=episodes.size),episodes)
     }
-    fun stream(id: String, maxQuality: Int = 1080, supported: (StreamInfo)->Boolean = { true }): StreamInfo {
-        var compatibility=playbackSession.compatibilityPlayback
-        repeat(2) { attempt ->
+    fun stream(id: String, maxQuality: Int = 1080, supported: (StreamInfo)->Boolean = { true }): StreamInfo =
+        RequestScope.withDeadline(System.nanoTime()+TimeUnit.SECONDS.toNanos(12)) {
+        val routes=buildList<RegisteredPlayer.Route?> {
+            if(!playbackSession.compatibilityPlayback) add(null)
+            add(playbackSession.compatibilityRoute)
+            addAll(RegisteredPlayer.Route.entries)
+        }.distinct()
+        for((attempt,route) in routes.withIndex()) {
+            RequestScope.ensureActive()
             try {
-                return streamOnce(id,maxQuality,supported,compatibility).also {
-                    if(compatibility) playbackSession.compatibilityPlayback=true
+                return@withDeadline streamOnce(id,maxQuality,supported,route).also {
+                    RequestScope.ensureNotCancelled()
+                    if(route!=null) {
+                        playbackSession.compatibilityRoute=route
+                        playbackSession.compatibilityPlayback=true
+                    }
                 }
             }
             catch(failure: EmptyContentException) {
+                RequestScope.ensureActive()
                 Diagnostics.failure("播放取址",failure)
-                if(attempt==1 || Thread.currentThread().isInterrupted) throw failure
-                Diagnostics.record("播放取址",if(compatibility) "兼容接口为空，仅重试一次" else "首选取址为空，尝试上游单集兼容接口；保留本机身份")
-                compatibility=true
+                if(attempt==routes.lastIndex) throw failure
+                Diagnostics.record("播放取址","${route?.name ?: "GET"} 返回空信息，尝试下一兼容路径；复用原设备身份")
             }
         }
         error("Unreachable")
     }
-    private fun streamOnce(id: String,maxQuality: Int,supported: (StreamInfo)->Boolean,compatibility: Boolean): StreamInfo {
+    private fun streamOnce(id: String,maxQuality: Int,supported: (StreamInfo)->Boolean,route: RegisteredPlayer.Route?): StreamInfo {
         requestGate.check("api5-normal-sinfonlineb.fqnovel.com")
         require(id.matches(Regex("[0-9]{1,30}")))
         // Current signed GET and nested model layout: N3urda/hongguoTV a2256e8, GPL-3.0.
         // Keep each identity's query/signature/cookie together; never rotate registration on errors.
-        val response=if(compatibility) {
+        val response=if(route!=null) {
             val device=playbackSession.playerProfile(http)
-            val request=RegisteredPlayer.request(id,device)
-            val body=text(request.url,request,timeoutMillis=10_000,metadata=false)
+            val request=RegisteredPlayer.request(id,device,route)
+            val body=text(request.url,request,timeoutMillis=4_000,metadata=false,anonymous=true)
             RegisteredPlayer.normalize(body,id)
         } else {
             val identity=playbackSession.profile(http)
@@ -232,7 +243,7 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
                 "need_mp4_align" to "0","use_os_player" to "0","video_platform" to "1024","source" to "0","from_video_id" to ""
             ))
             val request=if(identity.cookie.isBlank()) signed else signed.copy(headers=signed.headers+("Cookie" to identity.cookie))
-            text(request.url,request,timeoutMillis=10_000,metadata=false)
+            text(request.url,request,timeoutMillis=4_000,metadata=false)
         }
         if(response.isBlank()) throw EmptyContentException("播放接口返回空响应，请稍后重试或更新应用")
         val data=try { JSONObject(response) } catch(_: Exception) { throw PlaybackSourceException(PlaybackFailureKind.FORMAT,"播放信息格式已变化，请更新应用") }
@@ -248,6 +259,10 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
         val raw=model.opt("fallback_api")
         // A playable inline list may omit higher tiers that the same video's fallback exposes.
         if(raw==null || (initial!=null && qualityNumber(initial.quality)>=maxQuality)) {
+            return finishSelection(inline,maxQuality,false)
+        }
+        if(initial!=null && RequestScope.remainingMillis()<3_000) {
+            Diagnostics.record("清晰度补查","剩余取址时间不足，保留已有可播资源")
             return finishSelection(inline,maxQuality,false)
         }
         val supplemental=try {

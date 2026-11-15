@@ -89,7 +89,7 @@ class ContentRepositoryTest {
         assertThrows(EmptyContentException::class.java) { repo.stream("123") }
         val saved=session.snapshot()
         assertThrows(EmptyContentException::class.java) { repo.stream("123") }
-        assertEquals(listOf("12345","23456","12345","23456"),ids)
+        assertEquals(listOf("12345","23456","23456","23456","12345","23456","23456","23456"),ids)
         assertEquals(1,registrations);assertEquals(saved,session.snapshot());assertFalse(session.compatibilityPlayback)
     }
 
@@ -158,10 +158,66 @@ class ContentRepositoryTest {
         assertEquals(2,calls)
         calls=0
         assertThrows(EmptyContentException::class.java) { repository { calls++; "" }.stream("123") }
-        assertEquals(2,calls)
+        assertEquals(4,calls)
         calls=0
         assertThrows(PlaybackSourceException::class.java) { repository { calls++; """{"code":110001}""" }.stream("123") }
         assertEquals(1,calls)
+    }
+    @Test fun emptySingleAndBatchRecoverThroughPreloadAndReuseThatRouteAcrossRepositories() {
+        var registrations=0
+        val session=PlaybackDeviceSession(register={ _,_->DeviceRegister.Registered("12345","67890",cookies=mapOf("ttreq" to "private-cookie")) },
+            registerPlayer={ registrations++;PlayerDevice("23456","78901","player-cdid","","") })
+        val requests=mutableListOf<Request>()
+        val reply: (Request)->String={ request ->
+            requests+=request
+            if(request.url.encodedPath.contains("/preload/")) inlineModel(Triple(1080,"h264","https://example.com/high"),Triple(720,"h264","https://example.com/low")) else ""
+        }
+        val repo=repository(session=session,respond=reply)
+        assertEquals("720P",repo.stream("123",720).quality)
+        val saved=session.snapshot()
+        assertEquals("1080P",repository(session=session,respond=reply).stream("123",1080).quality)
+        assertEquals(listOf("/reading/bookapi/video_tab/multi_video_model/v1/","/novel/player/video_model/v1/",
+            "/novel/player/multi_video_model/v1/","/novel/player/multi_video_model/preload/v1/",
+            "/novel/player/multi_video_model/preload/v1/"),requests.map { it.url.encodedPath })
+        requests.drop(1).forEach { assertEquals("23456",it.url.queryParameter("device_id"));assertNull(it.header("Cookie")) }
+        assertEquals(1,registrations);assertEquals(saved,session.snapshot())
+    }
+
+    @Test fun anEmptyRememberedRouteFallsBackWithoutRotatingIdentity() {
+        var failPreload=false
+        val paths=mutableListOf<String>()
+        val repo=repository { request ->
+            val path=request.url.encodedPath;paths+=path
+            if((!failPreload && path.contains("/preload/")) || (failPreload && path=="/novel/player/multi_video_model/v1/"))
+                inlineModel(Triple(720,"h264","https://example.com/video")) else ""
+        }
+        repo.stream("123");paths.clear();failPreload=true
+        repo.stream("123")
+        assertEquals(listOf("/novel/player/multi_video_model/preload/v1/","/novel/player/video_model/v1/","/novel/player/multi_video_model/v1/"),paths)
+    }
+
+    @Test fun emptyModelDataCanRecoverButARefusedBatchNeverStartsPreload() {
+        var calls=0
+        val recovering=repository { request ->
+            calls++
+            if(request.url.encodedPath=="/novel/player/multi_video_model/v1/") inlineModel(Triple(720,"h264","https://example.com/video"))
+            else """{"code":0,"data":{}}"""
+        }
+        assertEquals("720P",recovering.stream("123").quality);assertEquals(3,calls)
+        val paths=mutableListOf<String>()
+        val refused=repository { request ->
+            paths+=request.url.encodedPath
+            if(request.url.encodedPath=="/novel/player/multi_video_model/v1/") """{"code":110001}""" else ""
+        }
+        assertThrows(PlaybackSourceException::class.java) { refused.stream("123") }
+        assertEquals(3,paths.size);assertFalse(paths.any { it.contains("/preload/") })
+    }
+
+    @Test fun cancelledEmptyReplyDoesNotStartAnotherPlaybackRoute() {
+        val scope=RequestScope();var calls=0
+        val repo=repository { calls++;scope.cancel();"" }
+        assertThrows(IOException::class.java) { scope.run { repo.stream("123") } }
+        assertEquals(1,calls);assertFalse(repo.playbackSession.compatibilityPlayback)
     }
     @Test fun encryptedInlineResourceWithoutKeyIsNotTreatedAsClearVideo() {
         val body=inlineModel(Triple(720,"h264","https://example.com/encrypted")).replace("\"encrypt\":false","\"encrypt\":true")

@@ -1,16 +1,16 @@
 # hongguo 版本、APK 发布与应用内更新
 
-当前正式版为 **[1.0.0](https://github.com/BeatsAD/hongguoTV/releases/tag/v1.0.0)**，正式安装包命名为 **`hongguo-1.0.0.apk`**，于 2026-11-11 发布。生产 Android 源码位于 `kotlin-tv/`，个人渠道为 `BeatsAD/hongguoTV`。最新已公开的版本以 [Releases](https://github.com/BeatsAD/hongguoTV/releases/latest) 为准，修改版本配置不表示已经发布。
+当前正式版为 **[1.0.5](https://github.com/BeatsAD/hongguoTV/releases/tag/v1.0.5)**，正式安装包命名为 **`hongguo-1.0.5.apk`**，于 2026-11-15 发布。生产 Android 源码位于 `kotlin-tv/`，个人渠道为 `BeatsAD/hongguoTV`。最新已公开的版本以 [Releases](https://github.com/BeatsAD/hongguoTV/releases/latest) 为准，修改版本配置不表示已经发布。
 
 ## 名称与版本
 
 | 项目 | 规则 |
 | --- | --- |
 | 应用名称 | `hongguo` |
-| 用户看到的版本 | `1.0.0`，不附加流水线编号或 `playbackfix` |
-| Release 标题 | `hongguo 1.0.0` |
-| Git 标签 | `v1.0.0` |
-| 唯一上传附件 | `hongguo-1.0.0.apk` |
+| 用户看到的版本 | `1.0.5`，不附加流水线编号或 `playbackfix` |
+| Release 标题 | `hongguo 1.0.5` |
+| Git 标签 | `v1.0.5` |
+| 唯一上传附件 | `hongguo-1.0.5.apk` |
 | 内部版本号 | 自动分配，保持大于已有分发构建，不进入安装包文件名 |
 
 修复问题递增修订号，例如 `1.0.1`；增加功能递增次版本，例如 `1.1.0`；重大不兼容调整才提升主版本。一个正式版本只对应一个 APK，发布后不替换内容。重做已发布版本必须提升版本名称。
@@ -20,7 +20,7 @@
 - `max(versionCodeBase, versionCodeFloor) + GITHUB_RUN_NUMBER`；
 - 所有可识别历史 Release（包括草稿）内部编号的最大值加一。
 
-当前最低保留编号为 10003，不因显示版本改为 1.0.0 而归零。工作流串行执行；重新运行已存在且源码相同的草稿会复用其编号，公开版本禁止重新分配或覆盖。未知 latest 格式、签名冲突、编号溢出、不同源码的同名草稿都会停止发布。
+当前最低保留编号为 10150，正式构建必须高于已安装到索尼电视的同源候选包。工作流串行执行；重新运行已存在且源码相同的草稿会复用其编号，公开版本禁止重新分配或覆盖。未知 latest 格式、签名冲突、编号溢出、不同源码的同名草稿都会停止发布。
 
 本地 `version` 命令还使用被忽略的 `outputs/version-code-reservation.txt` 记录本机编号。独立机器上未公开、未上报的私有构建无法由远端得知；不要把不同机器的私有签名包作为正式升级渠道混发。正式分发统一由本仓库串行工作流完成。
 
