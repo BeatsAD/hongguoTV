@@ -85,6 +85,32 @@ class PlaybackQualitySupplementTest {
             assertEquals(failure,1,calls)
         }
     }
+    @Test fun insufficientSharedBudgetKeepsInlineInsteadOfStartingOptionalLookup() {
+        val until=System.nanoTime()+TimeUnit.SECONDS.toNanos(2)
+        var calls=0
+        val repo=repository {
+            calls++
+            // Reproduce an optional request consuming the remaining overall budget.
+            Thread.sleep(TimeUnit.NANOSECONDS.toMillis((until-System.nanoTime()).coerceAtLeast(0))+50)
+            throw SocketTimeoutException("Optional lookup exhausted shared budget")
+        }
+        val selected=RequestScope.withDeadline(until) { repo.stream("123",1080) }
+        assertEquals("https://media.example/inline",selected.url)
+        assertEquals("720P",selected.quality);assertEquals(0,calls)
+    }
+
+    @Test fun skippingOptionalLookupStillRejectsACancelledPlaybackIntent() {
+        val scope=RequestScope();var calls=0
+        val repo=repository { calls++;throw AssertionError("No time for optional lookup") }
+        assertThrows(IOException::class.java) {
+            scope.run {
+                RequestScope.withDeadline(System.nanoTime()+TimeUnit.SECONDS.toNanos(2)) {
+                    repo.stream("123",1080) { scope.cancel();true }
+                }
+            }
+        }
+        assertEquals(0,calls)
+    }
     @Test fun fallbackAccessRejectionsObserveCooldownWithoutRetryingOrChangingIdentity() {
         for(status in listOf(401,403,429,503)) {
             var calls=0

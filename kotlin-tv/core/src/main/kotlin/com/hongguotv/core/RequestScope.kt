@@ -44,16 +44,24 @@ class RequestScope {
         private val current = ThreadLocal<RequestScope>()
         private val deadline = ThreadLocal<Long>()
         fun isCancelled(): Boolean = current.get()?.let { scope -> synchronized(scope) { scope.cancelled } } ?: false
-        internal fun ensureActive() {
+        internal fun ensureNotCancelled() {
             if(isCancelled() || Thread.currentThread().isInterrupted) throw InterruptedIOException("请求已取消")
+        }
+        internal fun ensureActive() {
+            ensureNotCancelled()
             if(deadline.get()?.let { it-System.nanoTime()<=0 }==true) throw SocketTimeoutException("播放取址超时")
         }
+        internal fun remainingMillis(): Long = deadline.get()?.let {
+            TimeUnit.NANOSECONDS.toMillis((it-System.nanoTime()).coerceAtLeast(0))
+        } ?: Long.MAX_VALUE
         internal fun <T> withDeadline(until: Long,action: ()->T): T {
             val previous=deadline.get()
             deadline.set(previous?.let { minOf(it,until) } ?: until)
             try {
                 ensureActive()
-                return action().also { ensureActive() }
+                // Network attempts share this deadline. A caller may recover a playable result
+                // after optional I/O times out; cancellation must still discard that result.
+                return action().also { ensureNotCancelled() }
             } finally {
                 if(previous==null) deadline.remove() else deadline.set(previous)
             }

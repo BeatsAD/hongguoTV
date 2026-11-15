@@ -210,7 +210,7 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
             RequestScope.ensureActive()
             try {
                 return@withDeadline streamOnce(id,maxQuality,supported,route).also {
-                    RequestScope.ensureActive()
+                    RequestScope.ensureNotCancelled()
                     if(route!=null) {
                         playbackSession.compatibilityRoute=route
                         playbackSession.compatibilityPlayback=true
@@ -259,6 +259,10 @@ class ContentRepository(val http: OkHttpClient = OkHttpClient.Builder().connectT
         val raw=model.opt("fallback_api")
         // A playable inline list may omit higher tiers that the same video's fallback exposes.
         if(raw==null || (initial!=null && qualityNumber(initial.quality)>=maxQuality)) {
+            return finishSelection(inline,maxQuality,false)
+        }
+        if(initial!=null && RequestScope.remainingMillis()<3_000) {
+            Diagnostics.record("清晰度补查","剩余取址时间不足，保留已有可播资源")
             return finishSelection(inline,maxQuality,false)
         }
         val supplemental=try {
